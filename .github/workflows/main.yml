@@ -4,6 +4,10 @@ on:
   schedule:
     - cron: '0 22 * * *'
 
+concurrency:
+  group: send-emails-daily
+  cancel-in-progress: false
+
 jobs:
   calculate-and-send:
     runs-on: ubuntu-latest
@@ -47,78 +51,81 @@ jobs:
           if [ -z "$TARGET_REF" ]; then
             TARGET_REF="${GITHUB_REF_NAME}"
           fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          LOCAL_HISTORY_FILE="$(mktemp)"
+          if [ -f data/classic_recommendation_history.json ]; then
+            cp data/classic_recommendation_history.json "$LOCAL_HISTORY_FILE"
+          else
+            printf '{"version": 1, "recommended": []}\n' > "$LOCAL_HISTORY_FILE"
+          fi
           COMMIT_MESSAGE_FILE="$(mktemp)"
           cat <<'EOF' > "$COMMIT_MESSAGE_FILE"
-Persist sent classic-paper history
+          Persist sent classic-paper history
 
-Constraint: GitHub Actions runs are ephemeral, so classic dedup history must live in the repository
-Rejected: Keep history only in workflow workspace | history would be lost between runs
-Confidence: high
-Scope-risk: narrow
-Directive: Only the production workflow should write classic history; keep test workflow read-only by default
-Tested: Daily workflow history add-on path
-Not-tested: Concurrent workflow runs updating history at the same time
-EOF
-          committed=0
+          Constraint: GitHub Actions runs are ephemeral, so classic dedup history must live in the repository
+          Rejected: Keep history only in workflow workspace | history would be lost between runs
+          Confidence: high
+          Scope-risk: narrow
+          Directive: Only the production workflow should write classic history; keep test workflow read-only by default
+          Tested: Push-retry rebases classic history onto the latest remote branch tip
+          Not-tested: Two workflow runs exhausting all retries under sustained contention
+          EOF
           for attempt in 1 2 3; do
             git fetch origin "$TARGET_REF"
+            git checkout -B classic-history-writeback "origin/${TARGET_REF}"
             REMOTE_HISTORY_FILE="$(mktemp)"
-            if git show "origin/${TARGET_REF}:data/classic_recommendation_history.json" > "$REMOTE_HISTORY_FILE" 2>/dev/null; then
-              python3 - "$REMOTE_HISTORY_FILE" data/classic_recommendation_history.json <<'PY'
-import json
-import sys
-from pathlib import Path
-
-remote_path = Path(sys.argv[1])
-local_path = Path(sys.argv[2])
-
-
-def load(path: Path) -> dict:
-    if not path.exists():
-        return {"version": 1, "recommended": []}
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return {"version": 1, "recommended": []}
-    if not isinstance(payload, dict):
-        return {"version": 1, "recommended": []}
-    entries = payload.get("recommended", [])
-    if not isinstance(entries, list):
-        entries = []
-    normalized = []
-    for entry in entries:
-        if isinstance(entry, dict) and isinstance(entry.get("id"), str):
-            normalized.append(entry)
-    return {"version": int(payload.get("version", 1) or 1), "recommended": normalized}
-
-
-remote = load(remote_path)
-local = load(local_path)
-merged = {}
-for entry in remote["recommended"] + local["recommended"]:
-    merged[entry["id"]] = entry
-
-payload = {
-    "version": 1,
-    "recommended": [merged[key] for key in sorted(merged)],
-}
-local_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-PY
+            if ! git show "origin/${TARGET_REF}:data/classic_recommendation_history.json" > "$REMOTE_HISTORY_FILE" 2>/dev/null; then
+              printf '{"version": 1, "recommended": []}\n' > "$REMOTE_HISTORY_FILE"
             fi
+            python3 - "$REMOTE_HISTORY_FILE" "$LOCAL_HISTORY_FILE" data/classic_recommendation_history.json <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          remote_path = Path(sys.argv[1])
+          local_snapshot_path = Path(sys.argv[2])
+          output_path = Path(sys.argv[3])
+
+
+          def load(path: Path) -> dict:
+              if not path.exists():
+                  return {"version": 1, "recommended": []}
+              try:
+                  payload = json.loads(path.read_text(encoding="utf-8"))
+              except json.JSONDecodeError:
+                  return {"version": 1, "recommended": []}
+              if not isinstance(payload, dict):
+                  return {"version": 1, "recommended": []}
+              entries = payload.get("recommended", [])
+              if not isinstance(entries, list):
+                  entries = []
+              normalized = []
+              for entry in entries:
+                  if isinstance(entry, dict) and isinstance(entry.get("id"), str):
+                      normalized.append(entry)
+              return {"version": int(payload.get("version", 1) or 1), "recommended": normalized}
+
+
+          remote = load(remote_path)
+          local = load(local_snapshot_path)
+          merged = {}
+          for entry in remote["recommended"] + local["recommended"]:
+              merged[entry["id"]] = entry
+
+          payload = {
+              "version": 1,
+              "recommended": [merged[key] for key in sorted(merged)],
+          }
+          output_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+          PY
             rm -f "$REMOTE_HISTORY_FILE"
             git add data/classic_recommendation_history.json
             if git diff --staged --quiet; then
               echo "No classic history changes to commit"
               exit 0
             fi
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            if [ "$committed" -eq 0 ]; then
-              git commit -F "$COMMIT_MESSAGE_FILE"
-              committed=1
-            else
-              git commit --amend --no-edit
-            fi
+            git commit -F "$COMMIT_MESSAGE_FILE"
             if git push origin "HEAD:${TARGET_REF}"; then
               exit 0
             fi
