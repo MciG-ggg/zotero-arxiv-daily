@@ -128,13 +128,20 @@ def _normalize_authors(raw_work: dict) -> tuple[list[str], list[str] | None]:
 def _paper_matches_topic_rules(paper: Paper, classics_config: DictConfig) -> bool:
     topic_filter = classics_config.topic_filter
     keywords = [keyword.lower() for keyword in topic_filter.keywords]
+    required_keywords = [keyword.lower() for keyword in topic_filter.get("required_keywords_any", [])]
     text = " ".join(part for part in [paper.title, paper.abstract] if part).lower()
     keyword_hits = 0
     for keyword in keywords:
         pattern = re.compile(rf"\b{re.escape(keyword)}\b")
         if pattern.search(text):
             keyword_hits += 1
-    return keyword_hits >= int(topic_filter.min_keyword_matches)
+    if keyword_hits < int(topic_filter.min_keyword_matches):
+        return False
+
+    if not required_keywords:
+        return True
+
+    return any(re.compile(rf"\b{re.escape(keyword)}\b").search(text) for keyword in required_keywords)
 
 
 class OpenAlexClassicRetriever:
@@ -175,7 +182,12 @@ class OpenAlexClassicRetriever:
         if publication_year is None or cited_by_count is None:
             return None
 
-        if publication_year > int(self.classics_config.max_publication_year):
+        current_year = datetime.now(timezone.utc).year
+        max_publication_year = min(int(self.classics_config.max_publication_year), current_year)
+        min_publication_year = current_year - int(self.classics_config.max_age_years) + 1
+        if publication_year > max_publication_year:
+            return None
+        if publication_year < min_publication_year:
             return None
         if cited_by_count < int(self.classics_config.min_citation_count):
             return None

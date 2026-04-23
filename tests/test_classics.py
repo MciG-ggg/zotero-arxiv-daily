@@ -62,8 +62,10 @@ def test_openalex_retriever_filters_and_normalizes(config, monkeypatch):
         config.classics.enabled = True
         config.classics.openalex.mailto = "test@example.com"
         config.classics.min_citation_count = 100
-        config.classics.max_publication_year = 2023
+        config.classics.max_publication_year = 9999
+        config.classics.max_age_years = 10
         config.classics.topic_filter.keywords = ["embodied", "robot"]
+        config.classics.topic_filter.required_keywords_any = ["robot"]
         config.classics.openalex.query_terms = ["embodied ai"]
 
     class StubResponse:
@@ -93,6 +95,74 @@ def test_openalex_retriever_filters_and_normalizes(config, monkeypatch):
     assert paper.published_year == 2020
     assert paper.citation_count == 321
     assert get_paper_dedup_id(paper) == "https://openalex.org/W123"
+
+
+def test_openalex_retriever_excludes_papers_older_than_max_age(config, monkeypatch):
+    with open_dict(config):
+        config.classics.enabled = True
+        config.classics.openalex.mailto = "test@example.com"
+        config.classics.max_publication_year = 9999
+        config.classics.max_age_years = 5
+        config.classics.topic_filter.keywords = ["robot", "manipulation"]
+        config.classics.topic_filter.required_keywords_any = ["robot"]
+        config.classics.min_citation_count = 100
+
+    class StubResponse:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {
+                "results": [
+                    _make_openalex_work(year=2019),
+                    _make_openalex_work(work_id="https://openalex.org/W456", year=2024, citations=400),
+                ]
+            }
+
+    monkeypatch.setattr("zotero_arxiv_daily.classics.requests.get", lambda *a, **kw: StubResponse())
+    papers = OpenAlexClassicRetriever(config).retrieve_papers()
+
+    assert len(papers) == 1
+    assert papers[0].published_year == 2024
+
+
+def test_openalex_retriever_excludes_llm_only_papers_without_robotics_terms(config, monkeypatch):
+    with open_dict(config):
+        config.classics.enabled = True
+        config.classics.openalex.mailto = "test@example.com"
+        config.classics.max_publication_year = 9999
+        config.classics.max_age_years = 10
+        config.classics.min_citation_count = 100
+        config.classics.topic_filter.keywords = ["embodied", "robot", "manipulation", "humanoid"]
+        config.classics.topic_filter.required_keywords_any = ["robot", "manipulation", "humanoid"]
+
+    class StubResponse:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {
+                "results": [
+                    _make_openalex_work(
+                        title="Embodied large language model agents",
+                        abstract="Embodied agents powered by large language models collaborate in virtual worlds.",
+                        work_id="https://openalex.org/W111",
+                        year=2025,
+                    ),
+                    _make_openalex_work(
+                        title="Humanoid robot manipulation with foundation models",
+                        abstract="A humanoid robot learns manipulation with a foundation model and visuomotor policy.",
+                        work_id="https://openalex.org/W222",
+                        year=2025,
+                        citations=500,
+                    ),
+                ]
+            }
+
+    monkeypatch.setattr("zotero_arxiv_daily.classics.requests.get", lambda *a, **kw: StubResponse())
+    papers = OpenAlexClassicRetriever(config).retrieve_papers()
+
+    assert [paper.title for paper in papers] == ["Humanoid robot manipulation with foundation models"]
 
 
 def test_classic_history_load_and_save_roundtrip(tmp_path):

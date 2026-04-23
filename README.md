@@ -180,7 +180,8 @@ classics:
   max_paper_num: 5 # The maximum number of classic papers included in the email. Example: 5
   candidate_pool_size: 20 # The number of top-cited OpenAlex works fetched per query before reranking. Example: 20
   min_citation_count: 100 # Minimum citations required for a paper to count as classic. Example: 100
-  max_publication_year: 2023 # Only papers published on or before this year are eligible. Example: 2023
+  max_age_years: 5 # Only papers published within the most recent N calendar years are eligible. Example: 5
+  max_publication_year: 9999 # Optional hard upper bound for publication year; the current year is always enforced automatically.
   history_path: data/classic_recommendation_history.json # Repo-tracked JSON file for already-sent classics.
   persist_history: false # Whether to update classic history after a successful send. Enable this in the daily workflow, keep it false in test runs.
   openalex:
@@ -188,9 +189,10 @@ classics:
     api_key: null # Optional if mailto is set. Example: oa-xxx
     mailto: null # Optional if api_key is set. Example: you@example.com
     query_terms:
-      - embodied ai
       - robot learning
       - dexterous manipulation
+      - humanoid robot control
+      - robot navigation
   topic_filter:
     keywords:
       - embodied
@@ -199,7 +201,12 @@ classics:
       - locomotion
       - imitation learning
       - reinforcement learning
-    min_keyword_matches: 1
+    required_keywords_any:
+      - robot
+      - manipulation
+      - locomotion
+      - humanoid
+    min_keyword_matches: 2
 ```
 
 That's all! Now you can test the workflow by manually triggering it:
@@ -233,12 +240,13 @@ This project is in active development. You can subscribe this repo via `Watch` s
 
 If `classics.enabled: true`, the workflow also:
 1. queries OpenAlex for high-citation candidate papers using your configured `query_terms`,
-2. applies an explicit embodied-AI keyword filter,
+2. applies a stricter embodied-robotics keyword filter,
 3. reranks the survivors against your Zotero library,
 4. sends them in a **separate Classic papers section**, and
 5. records sent classic IDs in `data/classic_recommendation_history.json` so they are not repeated later.
 
 The tracked history starts **from the upgraded version onward only**. It does **not** backfill older emails.
+By default, classics are also restricted to papers from the most recent **5 calendar years**, which helps keep the section focused on influential but still relevant embodied-robotics work instead of older or generic LLM-heavy papers.
 
 ## 📌 Limitations
 - The recommendation algorithm is very simple, it may not accurately reflect your interest. Welcome better ideas for improving the algorithm!

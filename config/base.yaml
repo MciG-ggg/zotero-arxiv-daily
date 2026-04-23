@@ -55,7 +55,8 @@ classics:
   max_paper_num: 5 # The maximum number of classic papers included in the email. Example: 5
   candidate_pool_size: 20 # The number of top-cited OpenAlex works fetched per query before reranking. Example: 20
   min_citation_count: 100 # Minimum citations required for a paper to count as classic. Example: 100
-  max_publication_year: 2023 # Only papers published on or before this year are eligible. Example: 2023
+  max_age_years: 5 # Only papers published within the most recent N calendar years are eligible. Example: 5
+  max_publication_year: 9999 # Optional hard upper bound for publication year; the current year is always enforced automatically.
   history_path: data/classic_recommendation_history.json # Repo-tracked JSON file for already-sent classics.
   persist_history: false # Whether to write newly sent classics into history_path after a successful send. Example: true
   openalex:
@@ -63,12 +64,14 @@ classics:
     api_key: null # OpenAlex API key, optional if mailto is provided. Example: oa-xxx
     mailto: null # Contact email for OpenAlex polite pool, optional if api_key is provided. Example: you@example.com
     query_terms: # Search terms used to fetch candidate classic papers from OpenAlex.
-      - embodied ai
       - robot learning
       - imitation learning for robotics
       - reinforcement learning for robotics
       - dexterous manipulation
       - mobile manipulation
+      - humanoid robot control
+      - robot navigation
+      - visuomotor policy
   topic_filter:
     keywords: # Explicit embodied-intelligence topic guardrail applied before Zotero reranking.
       - embodied
@@ -84,4 +87,15 @@ classics:
       - sim2real
       - imitation learning
       - reinforcement learning
-    min_keyword_matches: 1
+    required_keywords_any: # At least one of these robot/embodiment-specific terms must appear.
+      - robot
+      - robotic
+      - manipulation
+      - locomotion
+      - navigation
+      - visuomotor
+      - grasp
+      - dexterous
+      - humanoid
+      - sim2real
+    min_keyword_matches: 2
