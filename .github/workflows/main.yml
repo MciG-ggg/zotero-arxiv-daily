@@ -7,12 +7,15 @@ on:
 jobs:
   calculate-and-send:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
           repository: ${{ vars.REPOSITORY }}
           ref: ${{ vars.REF }}
+          fetch-depth: 0
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v7
@@ -26,9 +29,38 @@ jobs:
           SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_API_BASE: ${{ secrets.OPENAI_API_BASE }}
+          OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
+          OPENALEX_MAILTO: ${{ vars.OPENALEX_MAILTO }}
+          CLASSICS_ENABLED: true
+          CLASSIC_HISTORY_WRITEBACK: true
           CUSTOM_CONFIG: ${{ vars.CUSTOM_CONFIG }}
         run: |
           printf "%b\n" "$CUSTOM_CONFIG" > config/custom.yaml
           echo "Use custom config: "
           cat config/custom.yaml
           uv run src/zotero_arxiv_daily/main.py
+
+      - name: Commit classic history if changed
+        run: |
+          git restore --worktree config/custom.yaml
+          git add data/classic_recommendation_history.json
+          if git diff --staged --quiet; then
+            echo "No classic history changes to commit"
+            exit 0
+          fi
+          TARGET_REF="${{ vars.REF }}"
+          if [ -z "$TARGET_REF" ]; then
+            TARGET_REF="${GITHUB_REF_NAME}"
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "Persist sent classic-paper history
+
+          Constraint: GitHub Actions runs are ephemeral, so classic dedup history must live in the repository
+          Rejected: Keep history only in workflow workspace | history would be lost between runs
+          Confidence: high
+          Scope-risk: narrow
+          Directive: Only the production workflow should write classic history; keep test workflow read-only by default
+          Tested: Daily workflow history add-on path
+          Not-tested: Concurrent workflow runs updating history at the same time"
+          git push origin "HEAD:${TARGET_REF}"

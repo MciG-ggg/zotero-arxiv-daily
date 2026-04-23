@@ -7,6 +7,7 @@ from tests.canned_responses import make_sample_paper
 def test_render_email_with_papers():
     papers = [make_sample_paper(score=7.5, tldr="A great paper.", affiliations=["MIT"])]
     html = render_email(papers)
+    assert "Latest papers" in html
     assert "Sample Paper Title" in html
     assert "A great paper." in html
     assert "MIT" in html
@@ -45,6 +46,33 @@ def test_render_email_no_affiliations():
     paper = make_sample_paper(affiliations=None, score=7.0, tldr="ok")
     html = render_email([paper])
     assert "Unknown Affiliation" in html
+
+
+def test_render_email_separates_latest_and_classics():
+    latest = [make_sample_paper(title="Latest Paper", score=7.0, tldr="latest")]
+    classic = [
+        make_sample_paper(
+            title="Classic Paper",
+            score=8.2,
+            tldr="classic",
+            published_year=2018,
+            citation_count=999,
+        )
+    ]
+    html = render_email(latest, classic)
+    assert "Latest papers" in html
+    assert "Classic papers" in html
+    assert "Latest Paper" in html
+    assert "Classic Paper" in html
+    assert "Year:</strong> 2018" in html
+    assert "Citations:</strong> 999" in html
+
+
+def test_render_email_skips_empty_classic_section():
+    latest = [make_sample_paper(title="Latest Only", score=7.0, tldr="latest")]
+    html = render_email(latest, [])
+    assert "Latest papers" in html
+    assert "Classic papers" not in html
 
 
 def test_get_stars_low_score():

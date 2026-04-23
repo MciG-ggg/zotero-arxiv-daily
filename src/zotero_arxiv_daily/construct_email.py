@@ -1,5 +1,6 @@
-from .protocol import Paper
 import math
+
+from .protocol import Paper
 
 
 framework = """
@@ -8,14 +9,14 @@ framework = """
 <head>
   <style>
     .star-wrapper {
-      font-size: 1.3em; /* 调整星星大小 */
-      line-height: 1; /* 确保垂直对齐 */
+      font-size: 1.3em;
+      line-height: 1;
       display: inline-flex;
-      align-items: center; /* 保持对齐 */
+      align-items: center;
     }
     .half-star {
       display: inline-block;
-      width: 0.5em; /* 半颗星的宽度 */
+      width: 0.5em;
       overflow: hidden;
       white-space: nowrap;
       vertical-align: middle;
@@ -40,8 +41,9 @@ To unsubscribe, remove your email in your Github Action setting.
 </html>
 """
 
+
 def get_empty_html():
-  block_template = """
+    return """
   <table border="0" cellpadding="0" cellspacing="0" width="100%" style="font-family: Arial, sans-serif; border: 1px solid #ddd; border-radius: 8px; padding: 16px; background-color: #f9f9f9;">
   <tr>
     <td style="font-size: 20px; font-weight: bold; color: #333;">
@@ -50,9 +52,28 @@ def get_empty_html():
   </tr>
   </table>
   """
-  return block_template
 
-def get_block_html(title:str, authors:str, rate:str, tldr:str, pdf_url:str, affiliations:str=None):
+
+def get_block_html(
+    title: str,
+    authors: str,
+    rate: str,
+    tldr: str,
+    pdf_url: str,
+    affiliations: str = None,
+    details: str | None = None,
+):
+    detail_html = (
+        f"""
+    <tr>
+        <td style="font-size: 14px; color: #333; padding: 8px 0;">
+            {details}
+        </td>
+    </tr>
+"""
+        if details
+        else ""
+    )
     block_template = """
     <table border="0" cellpadding="0" cellspacing="0" width="100%" style="font-family: Arial, sans-serif; border: 1px solid #ddd; border-radius: 8px; padding: 16px; background-color: #f9f9f9;">
     <tr>
@@ -77,7 +98,7 @@ def get_block_html(title:str, authors:str, rate:str, tldr:str, pdf_url:str, affi
             <strong>TLDR:</strong> {tldr}
         </td>
     </tr>
-
+    {detail_html}
     <tr>
         <td style="padding: 8px 0;">
             <a href="{pdf_url}" style="display: inline-block; text-decoration: none; font-size: 14px; font-weight: bold; color: #fff; background-color: #d9534f; padding: 8px 16px; border-radius: 4px;">PDF</a>
@@ -85,9 +106,18 @@ def get_block_html(title:str, authors:str, rate:str, tldr:str, pdf_url:str, affi
     </tr>
 </table>
 """
-    return block_template.format(title=title, authors=authors,rate=rate, tldr=tldr, pdf_url=pdf_url, affiliations=affiliations)
+    return block_template.format(
+        title=title,
+        authors=authors,
+        rate=rate,
+        tldr=tldr,
+        pdf_url=pdf_url,
+        affiliations=affiliations,
+        detail_html=detail_html,
+    )
 
-def get_stars(score:float):
+
+def get_stars(score: float):
     full_star = '<span class="full-star">⭐</span>'
     half_star = '<span class="half-star">⭐</span>'
     low = 6
@@ -97,35 +127,79 @@ def get_stars(score:float):
     elif score >= high:
         return full_star * 5
     else:
-        interval = (high-low) / 10
-        star_num = math.ceil((score-low) / interval)
-        full_star_num = int(star_num/2)
+        interval = (high - low) / 10
+        star_num = math.ceil((score - low) / interval)
+        full_star_num = int(star_num / 2)
         half_star_num = star_num - full_star_num * 2
-        return '<div class="star-wrapper">'+full_star * full_star_num + half_star * half_star_num + '</div>'
+        return '<div class="star-wrapper">' + full_star * full_star_num + half_star * half_star_num + '</div>'
 
 
-def render_email(papers:list[Paper]) -> str:
+def _truncate_authors(paper: Paper) -> str:
+    author_list = [author for author in paper.authors]
+    if len(author_list) <= 5:
+        return ', '.join(author_list)
+    return ', '.join(author_list[:3] + ['...'] + author_list[-2:])
+
+
+def _truncate_affiliations(paper: Paper) -> str:
+    if paper.affiliations is None:
+        return 'Unknown Affiliation'
+    affiliations = paper.affiliations[:5]
+    text = ', '.join(affiliations)
+    if len(paper.affiliations) > 5:
+        text += ', ...'
+    return text
+
+
+def _render_section(title: str, subtitle: str, papers: list[Paper]) -> str:
     parts = []
-    if len(papers) == 0 :
-        return framework.replace('__CONTENT__', get_empty_html())
-    
-    for p in papers:
-        #rate = get_stars(p.score)
-        rate = round(p.score, 1) if p.score is not None else 'Unknown'
-        author_list = [a for a in p.authors]
-        num_authors = len(author_list)
-        if num_authors <= 5:
-            authors = ', '.join(author_list)
-        else:
-            authors = ', '.join(author_list[:3] + ['...'] + author_list[-2:])
-        if p.affiliations is not None:
-            affiliations = p.affiliations[:5]
-            affiliations = ', '.join(affiliations)
-            if len(p.affiliations) > 5:
-                affiliations += ', ...'
-        else:
-            affiliations = 'Unknown Affiliation'
-        parts.append(get_block_html(p.title, authors, rate, p.tldr, p.pdf_url, affiliations))
+    for paper in papers:
+        details = []
+        if paper.published_year is not None:
+            details.append(f"<strong>Year:</strong> {paper.published_year}")
+        if paper.citation_count is not None:
+            details.append(f"<strong>Citations:</strong> {paper.citation_count}")
+        parts.append(
+            get_block_html(
+                paper.title,
+                _truncate_authors(paper),
+                round(paper.score, 1) if paper.score is not None else 'Unknown',
+                paper.tldr,
+                paper.pdf_url or paper.url,
+                _truncate_affiliations(paper),
+                " &nbsp;|&nbsp; ".join(details) if details else None,
+            )
+        )
 
-    content = '<br>' + '</br><br>'.join(parts) + '</br>'
-    return framework.replace('__CONTENT__', content)
+    return f"""
+<div style="margin: 24px 0 12px 0;">
+  <h2 style="margin-bottom: 6px;">{title}</h2>
+  <p style="margin-top: 0; color: #666;">{subtitle}</p>
+</div>
+<br>{'</br><br>'.join(parts)}</br>
+"""
+
+
+def render_email(latest_papers: list[Paper], classic_papers: list[Paper] | None = None) -> str:
+    classic_papers = classic_papers or []
+    if not latest_papers and not classic_papers:
+        return framework.replace('__CONTENT__', get_empty_html())
+
+    sections = []
+    if latest_papers:
+        sections.append(
+            _render_section(
+                "Latest papers",
+                "Fresh papers retrieved from your configured sources and reranked against Zotero.",
+                latest_papers,
+            )
+        )
+    if classic_papers:
+        sections.append(
+            _render_section(
+                "Classic papers",
+                "High-citation embodied-AI classics filtered by explicit topic rules and reranked against Zotero.",
+                classic_papers,
+            )
+        )
+    return framework.replace('__CONTENT__', "".join(sections))

@@ -18,7 +18,7 @@ email:
   receiver: ??? # The email account that receives the paper list. Example: abc@outlook.com
   smtp_server: ??? # The SMTP server that sends the email. Ask your email provider (Gmail, QQ, Outlook, ...) for its SMTP server. Example: smtp.qq.com
   smtp_port: ??? # The port of SMTP server. Example: 465
-  sender_password: ??? # The password of the sender account. Note that it's not necessarily the password for logging in the e-mail client, but the authentication code for SMTP service. Ask your email provider for this. Example: abcdefghijklmn
+  sender_password: ??? # The SMTP credential of the sender account. For QQ Mail, use the SMTP authorization code rather than the mailbox login password. Example: abcdefghijklmn
 
 llm:
   api:
@@ -49,3 +49,39 @@ executor:
   max_paper_num: 100 # The maximum number of the papers presented in the email. Example: 100
   source: ??? # The sources of papers to retrieve. Example: ['arxiv','biorxiv','medrxiv']
   reranker: local # The reranker to use. Example: 'local' or 'api'
+
+classics:
+  enabled: false # Whether to add a separate classic-paper section. Example: true
+  max_paper_num: 5 # The maximum number of classic papers included in the email. Example: 5
+  candidate_pool_size: 20 # The number of top-cited OpenAlex works fetched per query before reranking. Example: 20
+  min_citation_count: 100 # Minimum citations required for a paper to count as classic. Example: 100
+  max_publication_year: 2023 # Only papers published on or before this year are eligible. Example: 2023
+  history_path: data/classic_recommendation_history.json # Repo-tracked JSON file for already-sent classics.
+  persist_history: false # Whether to write newly sent classics into history_path after a successful send. Example: true
+  openalex:
+    base_url: https://api.openalex.org
+    api_key: null # OpenAlex API key, optional if mailto is provided. Example: oa-xxx
+    mailto: null # Contact email for OpenAlex polite pool, optional if api_key is provided. Example: you@example.com
+    query_terms: # Search terms used to fetch candidate classic papers from OpenAlex.
+      - embodied ai
+      - robot learning
+      - imitation learning for robotics
+      - reinforcement learning for robotics
+      - dexterous manipulation
+      - mobile manipulation
+  topic_filter:
+    keywords: # Explicit embodied-intelligence topic guardrail applied before Zotero reranking.
+      - embodied
+      - robot
+      - robotic
+      - manipulation
+      - locomotion
+      - navigation
+      - visuomotor
+      - grasp
+      - dexterous
+      - humanoid
+      - sim2real
+      - imitation learning
+      - reinforcement learning
+    min_keyword_matches: 1

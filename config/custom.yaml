@@ -20,7 +20,16 @@ llm:
 source:
   arxiv:
     category: ["cs.AI","cs.CV","cs.LG","cs.CL"]
+    include_cross_list: false
 
 executor:
   debug: ${oc.env:DEBUG,null}
   source: ['arxiv']
+  reranker: local
+
+classics:
+  enabled: ${oc.env:CLASSICS_ENABLED,false}
+  persist_history: ${oc.env:CLASSIC_HISTORY_WRITEBACK,false}
+  openalex:
+    api_key: ${oc.env:OPENALEX_API_KEY,null}
+    mailto: ${oc.env:OPENALEX_MAILTO,null}

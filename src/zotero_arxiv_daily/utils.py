@@ -155,16 +155,24 @@ def send_email(config:DictConfig, html:str):
     today = datetime.datetime.now().strftime('%Y/%m/%d')
     msg['Subject'] = Header(f'Daily arXiv {today}', 'utf-8').encode()
 
+    use_ssl = str(smtp_port) == '465'
     try:
-        server = smtplib.SMTP(smtp_server, smtp_port)
-        server.starttls()
-    except Exception as e:
-        logger.debug(f"Failed to use TLS. {e}\nTry to use SSL.")
-        try:
+        if use_ssl:
             server = smtplib.SMTP_SSL(smtp_server, smtp_port)
-        except Exception as e:
+        else:
+            server = smtplib.SMTP(smtp_server, smtp_port)
+            server.starttls()
+    except Exception as e:
+        if use_ssl:
             logger.debug(f"Failed to use SSL. {e}\nTry to use plain text.")
             server = smtplib.SMTP(smtp_server, smtp_port)
+        else:
+            logger.debug(f"Failed to use configured SMTP transport. {e}\nTry to use SSL.")
+            try:
+                server = smtplib.SMTP_SSL(smtp_server, smtp_port)
+            except Exception as e:
+                logger.debug(f"Failed to use SSL. {e}\nTry to use plain text.")
+                server = smtplib.SMTP(smtp_server, smtp_port)
 
     server.login(sender, password)
     server.sendmail(sender, [receiver], msg.as_string())

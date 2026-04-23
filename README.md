@@ -37,6 +37,9 @@
 - Affiliations of the paper are resolved and presented.
 - Links of PDF and code implementation (if any) presented in the e-mail.
 - List of papers sorted by relevance with your recent research interest.
+- Optional hybrid embodied-AI mode: explicit topic filter + Zotero reranking.
+- Optional separate classic-paper section backed by OpenAlex.
+- Repo-tracked classic-paper history so already-sent classics are not recommended twice.
 - Fast deployment via fork this repo and set environment variables in the Github Action Page.
 - Support LLM API for generating TL;DR of papers.
 - Ignore unwanted Zotero papers using a list of glob patterns.
@@ -63,10 +66,12 @@ Below are all the secrets you need to set. They are invisible to anyone includin
 | ZOTERO_ID  | User ID of your Zotero account. **User ID is not your username, but a sequence of numbers**Get your ID from [here](https://www.zotero.org/settings/security). You can find it at the position shown in this [screenshot](https://github.com/TideDra/zotero-arxiv-daily/blob/main/assets/userid.png). | 12345678  |
 | ZOTERO_KEY | An Zotero API key with read access. Get a key from [here](https://www.zotero.org/settings/security).  | AB5tZ877P2j7Sm2Mragq041H   |
 | SENDER | The email account of the SMTP server that sends you email. | abc@qq.com |
-| SENDER_PASSWORD | The password of the sender account. Note that it's not necessarily the password for logging in the e-mail client, but the authentication code for SMTP service. Ask your email provider for this.   | abcdefghijklmn |
+| SENDER_PASSWORD | The SMTP credential of the sender account. For QQ Mail, this should be the **SMTP authorization code**, **not** the mailbox login password. Ask your email provider for the correct SMTP credential type.   | abcdefghijklmn |
 | RECEIVER | The e-mail address that receives the paper list. | abc@outlook.com |
 | OPENAI_API_KEY | API Key when using the API to access LLMs. You can get FREE API for using advanced open source LLMs in [SiliconFlow](https://cloud.siliconflow.cn/i/b3XhBRAm). | sk-xxx |
 | OPENAI_API_BASE | API URL when using the API to access LLMs. | https://api.siliconflow.cn/v1 |
+| OPENALEX_API_KEY | Optional OpenAlex API key for the classic-paper feature. You can also use `OPENALEX_MAILTO` instead, but at least one of them must be configured when `classics.enabled: true`. | oa-xxx |
+| OPENALEX_MAILTO | Contact email for OpenAlex polite-pool access. Can be used instead of `OPENALEX_API_KEY`. | you@example.com |
 
 Then you should also set a public variable `CUSTOM_CONFIG` for your custom configuration.
 ![vars](./assets/repo_var.png)
@@ -100,10 +105,22 @@ source:
 executor:
   debug: ${oc.env:DEBUG,null}
   source: ['arxiv']
+  reranker: local
+
+classics:
+  enabled: ${oc.env:CLASSICS_ENABLED,false}
+  persist_history: ${oc.env:CLASSIC_HISTORY_WRITEBACK,false}
+  openalex:
+    api_key: ${oc.env:OPENALEX_API_KEY,null}
+    mailto: ${oc.env:OPENALEX_MAILTO,null}
 ```
 Set `source.arxiv.include_cross_list: true` if you want cross-listed papers included.
 >[!NOTE]
 > `${oc.env:XXX,yyy}` means the value of the environment variable `XXX`. If the variable is not set, the default value `yyy` will be used.
+>
+> For **QQ Mail** with `smtp.qq.com:465`, `SENDER_PASSWORD` must be the **QQ SMTP authorization code**. If GitHub Actions fails during SMTP login or the connection closes unexpectedly, first confirm SMTP is enabled in QQ Mail and the stored secret is the authorization code rather than the mailbox login password.
+>
+> The classic-paper feature is opt-in. When `classics.enabled: true`, you must update your `CUSTOM_CONFIG` repo variable to include the `classics:` section shown above (or equivalent overrides), otherwise GitHub Actions will keep using your older config and classics will stay disabled.
 
 Here is the full configuration, `???` means the value must be filled in:
 ```yaml
@@ -126,7 +143,7 @@ email:
   receiver: ??? # The email account that receives the paper list. Example: abc@outlook.com
   smtp_server: ??? # The SMTP server that sends the email. Ask your email provider (Gmail, QQ, Outlook, ...) for its SMTP server. Example: smtp.qq.com
   smtp_port: ??? # The port of SMTP server. Example: 465
-  sender_password: ??? # The password of the sender account. Note that it's not necessarily the password for logging in the e-mail client, but the authentication code for SMTP service. Ask your email provider for this. Example: abcdefghijklmn
+  sender_password: ??? # The SMTP credential of the sender account. For QQ Mail, use the SMTP authorization code rather than the mailbox login password. Example: abcdefghijklmn
 
 llm:
   api:
@@ -157,6 +174,32 @@ executor:
   max_paper_num: 100 # The maximum number of the papers presented in the email. Example: 100
   source: ??? # The sources of papers to retrieve. Example: ['arxiv','biorxiv','medrxiv']
   reranker: local # The reranker to use. Example: 'local' or 'api'
+
+classics:
+  enabled: false # Whether to add a separate classic-paper section. Example: true
+  max_paper_num: 5 # The maximum number of classic papers included in the email. Example: 5
+  candidate_pool_size: 20 # The number of top-cited OpenAlex works fetched per query before reranking. Example: 20
+  min_citation_count: 100 # Minimum citations required for a paper to count as classic. Example: 100
+  max_publication_year: 2023 # Only papers published on or before this year are eligible. Example: 2023
+  history_path: data/classic_recommendation_history.json # Repo-tracked JSON file for already-sent classics.
+  persist_history: false # Whether to update classic history after a successful send. Enable this in the daily workflow, keep it false in test runs.
+  openalex:
+    base_url: https://api.openalex.org
+    api_key: null # Optional if mailto is set. Example: oa-xxx
+    mailto: null # Optional if api_key is set. Example: you@example.com
+    query_terms:
+      - embodied ai
+      - robot learning
+      - dexterous manipulation
+  topic_filter:
+    keywords:
+      - embodied
+      - robot
+      - manipulation
+      - locomotion
+      - imitation learning
+      - reinforcement learning
+    min_keyword_matches: 1
 ```
 
 That's all! Now you can test the workflow by manually triggering it:
@@ -187,6 +230,15 @@ This project is in active development. You can subscribe this repo via `Watch` s
 
 ## 📖 How it works
 *Zotero-arXiv-Daily* firstly retrieves all the papers in your Zotero library and all the papers released in the previous day, via corresponding API. Then it calculates the embedding of each paper's abstract via an embedding model. The score of a paper is its weighted average similarity over all your Zotero papers (newer paper added to the library has higher weight). The TLDR of each paper is generated by LLM, given the text extracted by pymupdf4llm.
+
+If `classics.enabled: true`, the workflow also:
+1. queries OpenAlex for high-citation candidate papers using your configured `query_terms`,
+2. applies an explicit embodied-AI keyword filter,
+3. reranks the survivors against your Zotero library,
+4. sends them in a **separate Classic papers section**, and
+5. records sent classic IDs in `data/classic_recommendation_history.json` so they are not repeated later.
+
+The tracked history starts **from the upgraded version onward only**. It does **not** backfill older emails.
 
 ## 📌 Limitations
 - The recommendation algorithm is very simple, it may not accurately reflect your interest. Welcome better ideas for improving the algorithm!

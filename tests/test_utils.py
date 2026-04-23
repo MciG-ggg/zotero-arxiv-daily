@@ -133,6 +133,30 @@ def test_send_email_starttls_success(config, monkeypatch):
     assert "text/html" in body
 
 
+def test_send_email_prefers_ssl_for_port_465(config, monkeypatch):
+    sent = []
+    config.email.smtp_port = 465
+
+    class StubSMTP:
+        def __init__(self, *a, **kw):
+            raise AssertionError("SMTP should not be used first for port 465")
+
+    class StubSMTP_SSL:
+        def __init__(self, *a, **kw):
+            pass
+        def login(self, u, p):
+            pass
+        def sendmail(self, s, r, m):
+            sent.append((s, r, m))
+        def quit(self):
+            pass
+
+    monkeypatch.setattr(smtplib, "SMTP", StubSMTP)
+    monkeypatch.setattr(smtplib, "SMTP_SSL", StubSMTP_SSL)
+    send_email(config, "<html>ssl465</html>")
+    assert len(sent) == 1
+
+
 def test_send_email_falls_back_to_ssl(config, monkeypatch):
     sent = []
     call_count = {"smtp": 0}
