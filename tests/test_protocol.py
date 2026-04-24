@@ -4,15 +4,21 @@ import re
 
 import pytest
 
+from zotero_arxiv_daily.protocol import Paper
 from tests.canned_responses import (
     CLEAN_ONE_LINE_TLDR_RESPONSE,
+    COMBINED_TLDR_RESPONSE,
+    DECIMAL_METRIC_TLDR_RESPONSE,
+    DECIMAL_PERCENT_TLDR_RESPONSE,
     EMPTY_TLDR_RESPONSE,
     ENGLISH_ONLY_TLDR_RESPONSE,
     MARKDOWN_TLDR_RESPONSE,
     MIXED_TLDR_RESPONSE_CN_WITH_EN_META,
     NOISY_TLDR_RESPONSE_CN,
     NOISY_TLDR_RESPONSE_EN,
+    OR_SHORTER_TLDR_RESPONSE,
     REPAIRED_TLDR_RESPONSE_CN,
+    SENTENCE_LABEL_TLDR_RESPONSE,
     THREE_SENTENCE_TLDR_RESPONSE,
     make_sample_paper,
     make_stub_openai_client,
@@ -71,8 +77,7 @@ def test_tldr_truncates_long_prompt(llm_params):
 
 
 def _sentence_count(text: str) -> int:
-    fragments = [fragment.strip() for fragment in re.split(r"(?<=[.!?。！？])\s*", text) if fragment.strip()]
-    return len(fragments)
+    return len(Paper._split_tldr_sentences(text))
 
 
 def test_tldr_keeps_only_final_summary_for_mixed_chinese_output(llm_params):
@@ -184,6 +189,71 @@ def test_tldr_falls_back_to_source_excerpt_after_empty_generation(llm_params):
         "It aligns intermediate subgoals with visual affordances."
     )
     assert "A third sentence should not appear." not in result
+    assert _sentence_count(result) == 2
+
+
+def test_tldr_prefers_last_shorter_alternative(llm_params):
+    client = make_stub_openai_client(OR_SHORTER_TLDR_RESPONSE)
+    paper = make_sample_paper()
+
+    result = paper.generate_tldr(client, {**llm_params, "language": "Chinese"})
+
+    assert result == (
+        "LoHo-Manip通过任务管理VLM预测剩余子任务和视觉轨迹，使执行器VLA能够通过跟随轨迹完成局部控制，"
+        "实现了长时序操作任务的稳健执行和错误恢复，在仿真和真实Franka机器人上验证了其有效性。"
+    )
+    assert '"' not in result
+    assert "Or shorter" not in result
+
+
+def test_tldr_strips_sentence_labels_and_keeps_two_sentences(llm_params):
+    client = make_stub_openai_client(SENTENCE_LABEL_TLDR_RESPONSE)
+    paper = make_sample_paper()
+
+    result = paper.generate_tldr(client, {**llm_params, "language": "Chinese"})
+
+    assert result == (
+        "ResVLA通过“意图精炼”范式，利用频谱分析将控制解耦为低频意图锚点和高频残差，实现了比标准生成式基线更快的收敛速度和更强的扰动鲁棒性。"
+        "该方法通过残差扩散桥接技术在预测的全局意图上锚定生成过程，使模型能够专注于精炼局部动力学而非从噪声开始重建完整动作。"
+    )
+    assert "Sentence 1" not in result
+    assert "Sentence 2" not in result
+    assert _sentence_count(result) == 2
+
+
+def test_tldr_strips_combined_prefix_and_meta_tail(llm_params):
+    client = make_stub_openai_client(COMBINED_TLDR_RESPONSE)
+    paper = make_sample_paper()
+
+    result = paper.generate_tldr(client, {**llm_params, "language": "Chinese"})
+
+    assert result == (
+        "本研究提出了一种名为AmelPred的自预测表征模型，其随机版本AmelPredSto在与actor-critic强化学习算法结合时，"
+        "可显著提升无人机目标导航任务的样本效率。"
+    )
+    assert "Combined" not in result
+    assert "This is one sentence" not in result
+
+
+def test_tldr_preserves_decimal_metrics_without_sentence_truncation(llm_params):
+    client = make_stub_openai_client(DECIMAL_METRIC_TLDR_RESPONSE)
+    paper = make_sample_paper()
+
+    result = paper.generate_tldr(client, {**llm_params, "language": "Chinese"})
+
+    assert result == DECIMAL_METRIC_TLDR_RESPONSE
+    assert "2.79倍和2.31倍" in result
+    assert _sentence_count(result) == 1
+
+
+def test_tldr_preserves_decimal_percentages_without_truncation(llm_params):
+    client = make_stub_openai_client(DECIMAL_PERCENT_TLDR_RESPONSE)
+    paper = make_sample_paper()
+
+    result = paper.generate_tldr(client, {**llm_params, "language": "Chinese"})
+
+    assert result == DECIMAL_PERCENT_TLDR_RESPONSE
+    assert "37.5%" in result
     assert _sentence_count(result) == 2
 
 

@@ -51,15 +51,44 @@ class Paper:
     @staticmethod
     def _strip_tldr_prefix(text: str) -> str:
         prefix_pattern = re.compile(
-            r"(?is)^\s*(?:\*\*)?(?:here(?:'s| is)\s+(?:the\s+)?)?(?:(?:final|最终)\s*)?(?:tl\s*;?\s*dr|summary|final\s+summary|摘要|总结|一句话总结|简而言之|总之)"
+            r"(?is)^\s*(?:\*\*)?(?:here(?:'s| is)\s+(?:the\s+)?)?(?:(?:final|最终)\s*)?(?:"
+            r"tl\s*;?\s*dr|summary|final\s+summary|摘要|总结|一句话总结|简而言之|总之|"
+            r"combined|or\s+shorter|shorter(?:\s+version)?|or\s+more\s+concisely(?:\s+focusing\s+on\s+the\s+conclusion)?|"
+            r"sentence\s*[12](?:\s*\([^)]*\))?|main\s+conclusion(?:\s+sentence)?|conclusion(?:\s+sentence)?|"
+            r"key\s+method(?:\s*/\s*mechanism)?(?:\s*\([^)]*\))?|method(?:\s*/\s*mechanism)?|"
+            r"更简洁地说|更简短地说|更简洁版本|组合版|合并版|结论句|方法句)"
             r"(?:\*\*)?\s*[:：-]?\s*"
         )
         return prefix_pattern.sub("", text, count=1).strip()
 
     @staticmethod
     def _split_tldr_sentences(text: str) -> list[str]:
-        sentences = re.findall(r"[^.!?。！？]+(?:[.!?。！？]+|$)", text)
-        return [sentence.strip() for sentence in sentences if sentence.strip()]
+        text = re.sub(r"(?<=\d)\s*\.\s*(?=\d)", ".", text)
+        sentences: list[str] = []
+        buffer: list[str] = []
+
+        for index, char in enumerate(text):
+            buffer.append(char)
+            previous_char = text[index - 1] if index > 0 else ""
+            next_char = text[index + 1] if index + 1 < len(text) else ""
+
+            if char in "。！？":
+                sentences.append("".join(buffer).strip())
+                buffer = []
+                continue
+
+            if char in ".!?":
+                if previous_char.isdigit() and next_char.isdigit():
+                    continue
+                sentences.append("".join(buffer).strip())
+                buffer = []
+
+        if buffer:
+            remainder = "".join(buffer).strip()
+            if remainder:
+                sentences.append(remainder)
+
+        return [sentence for sentence in sentences if sentence]
 
     @staticmethod
     def _join_tldr_sentences(sentences: list[str]) -> str:
@@ -80,7 +109,8 @@ class Paper:
             r"i will|we can|to summarize|in summary|overall[, ]|this captures|the previous draft|"
             r"main conclusion|the main conclusion|key method|the key method|application context|"
             r"the application context|let me check if this meets the requirements|extra analysis|"
-            r"supplementary note|supplementary explanation|"
+            r"supplementary note|supplementary explanation|this is one sentence|this is two sentences|"
+            r"or shorter|combined|sentence\s*[12]|"
             r"让我|先来看|下面|核心要点|关键要点|总结如下|最终优化|先总结|简要总结|补充说明|额外分析|"
             r"让我检查|检查是否符合要求"
             r")"
@@ -106,6 +136,26 @@ class Paper:
         return cjk_chars == 0 and latin_words >= 3
 
     @staticmethod
+    def _strip_surrounding_quotes(text: str) -> str:
+        return text.strip().strip("\"'“”‘’").strip()
+
+    @staticmethod
+    def _prefer_last_alternative_segment(text: str) -> str:
+        alternative_patterns = [
+            r"(?is)\b(?:or\s+shorter|shorter(?:\s+version)?|or\s+more\s+concisely(?:\s+focusing\s+on\s+the\s+conclusion)?)\s*[:：-]\s*(.+)",
+            r"(?is)(?:更简洁地说|更简短地说|更简洁版本)\s*[:：-]\s*(.+)",
+        ]
+        for pattern in alternative_patterns:
+            matches = list(re.finditer(pattern, text))
+            if matches:
+                text = matches[-1].group(1).strip()
+        return text
+
+    @staticmethod
+    def _has_suspicious_numeric_tail(text: str) -> bool:
+        return bool(re.search(r"(?:\b(?:and|or)\s+|[与和及]\s*)?\d+\.$", text.strip(), flags=re.IGNORECASE))
+
+    @staticmethod
     def _is_failure_tldr_message(text: str) -> bool:
         return text.strip().startswith("Failed to generate TLDR.")
 
@@ -118,6 +168,8 @@ class Paper:
 
         sentences = self._split_tldr_sentences(text) or [text]
         if any(self._is_scaffold_sentence(sentence) for sentence in sentences):
+            return True
+        if self._has_suspicious_numeric_tail(text):
             return True
 
         if self._targets_chinese(lang):
@@ -186,9 +238,14 @@ class Paper:
             return text
 
         text = text.replace("\r\n", "\n").replace("\r", "\n")
+        text = re.sub(r"(?<=\d)\s*\.\s*(?=\d)", ".", text)
         text = re.sub(r"\[(.*?)\]\((.*?)\)", r"\1", text)
         text = re.sub(r"[*_`#>✓✔✗✘]", "", text)
         text = self._extract_tldr_segment(text)
+        text = self._prefer_last_alternative_segment(text)
+        text = re.sub(r"(?is)\bSentence\s*1(?:\s*\([^)]*\))?\s*[:：-]\s*", "", text)
+        text = re.sub(r"(?is)\bSentence\s*2(?:\s*\([^)]*\))?\s*[:：-]\s*", " ", text)
+        text = self._strip_surrounding_quotes(text)
 
         cleaned_lines: list[str] = []
         for line in text.split("\n"):
@@ -197,6 +254,7 @@ class Paper:
                 continue
             line = re.sub(r"^(?:[-*•]+|\d+[.)]|[A-Za-z][.)])\s*", "", line)
             line = self._strip_tldr_prefix(line)
+            line = self._strip_surrounding_quotes(line)
             if line:
                 cleaned_lines.append(line)
 
@@ -206,6 +264,7 @@ class Paper:
         candidate_sentences = []
         for sentence in self._split_tldr_sentences(text):
             sentence = self._strip_tldr_prefix(sentence)
+            sentence = self._strip_surrounding_quotes(sentence)
             sentence = re.sub(r"\s+", " ", sentence).strip(" -–—:;，、")
             if sentence and not self._is_scaffold_sentence(sentence):
                 candidate_sentences.append(sentence)
@@ -279,8 +338,6 @@ class Paper:
                 repaired_cleaned_tldr = self._cleanup_tldr(repaired_tldr)
                 if repaired_cleaned_tldr and not self._needs_tldr_repair(repaired_cleaned_tldr, lang):
                     cleaned_tldr = repaired_cleaned_tldr
-                elif cleaned_tldr:
-                    logger.warning(f"Using best-effort TLDR after failed repair for {self.url}")
                 else:
                     logger.warning(f"Falling back to source excerpt after invalid TLDR repair for {self.url}")
                     cleaned_tldr = self._fallback_tldr_from_source()

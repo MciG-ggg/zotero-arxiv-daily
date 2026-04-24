@@ -63,6 +63,35 @@ MIXED_TLDR_RESPONSE_CN_WITH_EN_META = (
     "Let me check if this meets the requirements: Two sentences ✓ Chinese ✓ No markdown/bullets/labels ✓"
 )
 
+OR_SHORTER_TLDR_RESPONSE = (
+    "\"LoHo-Manip通过将任务管理VLM与执行器VLA解耦，并引入视觉轨迹作为条件信号，将长时序操作任务分解为短时序局部控制问题，"
+    "在仿真和真实Franka机器人上的实验验证了其在长时序任务中的显著优势。\" "
+    "Or shorter: \"LoHo-Manip通过任务管理VLM预测剩余子任务和视觉轨迹，使执行器VLA能够通过跟随轨迹完成局部控制，"
+    "实现了长时序操作任务的稳健执行和错误恢复，在仿真和真实Franka机器人上验证了其有效性。\""
+)
+
+SENTENCE_LABEL_TLDR_RESPONSE = (
+    "Sentence 1 (conclusion): ResVLA通过“意图精炼”范式，利用频谱分析将控制解耦为低频意图锚点和高频残差，"
+    "实现了比标准生成式基线更快的收敛速度和更强的扰动鲁棒性。 "
+    "Sentence 2 (key method/mechanism - optional): 该方法通过残差扩散桥接技术在预测的全局意图上锚定生成过程，"
+    "使模型能够专注于精炼局部动力学而非从噪声开始重建完整动作。"
+)
+
+COMBINED_TLDR_RESPONSE = (
+    "Combined: 本研究提出了一种名为AmelPred的自预测表征模型，其随机版本AmelPredSto在与actor-critic强化学习算法结合时，"
+    "可显著提升无人机目标导航任务的样本效率。This is one sentence."
+)
+
+DECIMAL_METRIC_TLDR_RESPONSE = (
+    "VistaBot通过将前馈几何模型与视频扩散模型相结合，实现了无需测试时相机标定的视角鲁棒闭环机械臂操控，"
+    "在VGS指标上分别比ACT和π0提升了2.79倍和2.31倍。"
+)
+
+DECIMAL_PERCENT_TLDR_RESPONSE = (
+    "Hi-WM提出了一种可扩展的机器人后训练框架，通过在可学习的世界模型中进行人类纠正干预，"
+    "将物理执行约束转变为可重用的交互式纠错过程。实验表明，该方法在三个真实机械臂操作任务上将成功率平均提升37.5%。"
+)
+
 
 def _make_chat_response(content: str) -> SimpleNamespace:
     return SimpleNamespace(

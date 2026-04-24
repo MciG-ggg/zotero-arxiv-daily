@@ -151,6 +151,18 @@ def _truncate_affiliations(paper: Paper) -> str:
     return text
 
 
+def _safe_tldr(paper: Paper) -> str:
+    tldr = (paper.tldr or "").strip()
+    if tldr:
+        return tldr
+
+    fallback = paper._fallback_tldr_from_source()
+    if fallback:
+        return fallback
+
+    return paper.title
+
+
 def _render_section(title: str, subtitle: str, papers: list[Paper]) -> str:
     parts = []
     for paper in papers:
@@ -164,7 +176,7 @@ def _render_section(title: str, subtitle: str, papers: list[Paper]) -> str:
                 paper.title,
                 _truncate_authors(paper),
                 round(paper.score, 1) if paper.score is not None else 'Unknown',
-                paper.tldr,
+                _safe_tldr(paper),
                 paper.pdf_url or paper.url,
                 _truncate_affiliations(paper),
                 " &nbsp;|&nbsp; ".join(details) if details else None,

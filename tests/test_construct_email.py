@@ -48,6 +48,16 @@ def test_render_email_no_affiliations():
     assert "Unknown Affiliation" in html
 
 
+def test_render_email_uses_fallback_when_tldr_is_empty():
+    paper = make_sample_paper(
+        score=7.0,
+        tldr="",
+        abstract="This paper improves manipulation reliability. It adds view-consistent planning.",
+    )
+    html = render_email([paper])
+    assert "This paper improves manipulation reliability. It adds view-consistent planning." in html
+
+
 def test_render_email_separates_latest_and_classics():
     latest = [make_sample_paper(title="Latest Paper", score=7.0, tldr="latest")]
     classic = [
