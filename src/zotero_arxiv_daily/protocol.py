@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional, TypeVar
 from datetime import datetime
+from difflib import SequenceMatcher
 import html
 import re
 import tiktoken
@@ -54,10 +55,11 @@ class Paper:
         prefix_pattern = re.compile(
             r"(?is)^\s*(?:\*\*)?(?:here(?:'s| is)\s+(?:the\s+)?)?(?:(?:final|最终)\s*)?(?:"
             r"tl\s*;?\s*dr|summary|final\s+summary|摘要|总结|一句话总结|简而言之|总之|"
+            r"possible\s+tl\s*;?\s*dr|possible\s+tldr|likely\s+tl\s*;?\s*dr|likely\s+tldr|"
             r"combined|or\s+shorter|shorter(?:\s+version)?|or\s+more\s+concisely(?:\s+focusing\s+on\s+the\s+conclusion)?|"
             r"sentence\s*[12](?:\s*\([^)]*\))?|main\s+conclusion(?:\s+sentence)?|conclusion(?:\s+sentence)?|"
             r"key\s+method(?:\s*/\s*mechanism)?(?:\s*\([^)]*\))?|method(?:\s*/\s*mechanism)?|"
-            r"更简洁地说|更简短地说|更简洁版本|组合版|合并版|结论句|方法句|"
+            r"更简洁地说|更简短地说|更简洁版本|组合版|合并版|结论句|方法句|可能的tldr|"
             r"构思|思路|草稿|第[一二两123]+句(?:（[^）]+）)?)"
             r"(?:\*\*)?\s*[:：-]?\s*"
         )
@@ -112,16 +114,18 @@ class Paper:
             r"main conclusion|the main conclusion|key method|the key method|application context|"
             r"the application context|let me check if this meets the requirements|extra analysis|"
             r"supplementary note|supplementary explanation|this is one sentence|this is two sentences|"
-            r"or shorter|combined|sentence\s*[12]|"
+            r"or shorter|combined|sentence\s*[12]|possible\s+tldr|likely\s+tldr|"
             r"ideation|draft|"
             r"让我|先来看|下面|核心要点|关键要点|总结如下|最终优化|先总结|简要总结|补充说明|额外分析|"
-            r"让我检查|检查是否符合要求|构思|思路|草稿|进一步精炼表述|确保信息精准且逻辑清晰"
+            r"让我检查|检查是否符合要求|构思|思路|草稿|进一步精炼表述|确保信息精准且逻辑清晰|"
+            r"用户要求我|适合邮件直接展示|一句话概括即可|可能的tldr|这是一篇关于"
             r")"
         )
         meta_leak_pattern = re.compile(
             r"(?is)(?:"
             r"meets the requirements|no markdown|no labels|two sentences|one conclusion sentence|"
             r"optional second sentence|return only the final|email-ready tldr|"
+            r"用户要求我|根据(?:提供的)?论文信息(?:重新)?写(?:一段|一个)?|可能的tldr|适合邮件直接展示|"
             r"符合要求|不要 markdown|不要标签|两句话|一句结论|第二句"
             r")"
         )
@@ -159,8 +163,42 @@ class Paper:
         return bool(re.search(r"(?:\b(?:and|or)\s+|[与和及]\s*)?\d+\.$", text.strip(), flags=re.IGNORECASE))
 
     @staticmethod
+    def _normalize_sentence_for_similarity(text: str) -> str:
+        normalized = re.sub(r"[^\w\u3400-\u9fff]+", "", text.lower(), flags=re.UNICODE)
+        return normalized
+
+    @classmethod
+    def _is_redundant_tldr_sentence(cls, candidate: str, existing: str) -> bool:
+        candidate_normalized = cls._normalize_sentence_for_similarity(candidate)
+        existing_normalized = cls._normalize_sentence_for_similarity(existing)
+        if not candidate_normalized or not existing_normalized:
+            return False
+
+        shorter, longer = sorted(
+            [candidate_normalized, existing_normalized],
+            key=len,
+        )
+        if shorter and shorter in longer and len(shorter) / len(longer) >= 0.6:
+            return True
+
+        return SequenceMatcher(None, candidate_normalized, existing_normalized).ratio() >= 0.72
+
+    @staticmethod
     def _is_failure_tldr_message(text: str) -> bool:
         return text.strip().startswith("Failed to generate TLDR.")
+
+    @staticmethod
+    def _raw_tldr_has_meta_leak(text: str) -> bool:
+        return bool(
+            re.search(
+                r"(?is)(?:"
+                r"用户要求我|根据(?:提供的)?论文信息(?:重新)?写(?:一段|一个)?|适合邮件直接展示|"
+                r"一句话概括即可|可能的tldr|possible\s+tldr|likely\s+tldr|or\s+shorter|"
+                r"sentence\s*[12]|combined|构思|思路|草稿|第[一二两123]+句|这是一篇关于"
+                r")",
+                html.unescape(text or ""),
+            )
+        )
 
     def _needs_tldr_repair(self, cleaned_tldr: str, lang: str) -> bool:
         text = (cleaned_tldr or "").strip()
@@ -295,7 +333,7 @@ class Paper:
 
         sentences = []
         for sentence in candidate_sentences:
-            if sentence:
+            if sentence and not any(self._is_redundant_tldr_sentence(sentence, kept) for kept in sentences):
                 sentences.append(sentence)
             if len(sentences) == 2:
                 break
@@ -362,7 +400,7 @@ class Paper:
                 return tldr
 
             cleaned_tldr = self._cleanup_tldr(tldr)
-            if self._needs_tldr_repair(cleaned_tldr, lang):
+            if self._needs_tldr_repair(cleaned_tldr, lang) or self._raw_tldr_has_meta_leak(tldr):
                 logger.warning(f"TLDR output needs repair for {self.url}")
                 repaired_tldr = self._repair_tldr_with_llm(openai_client, llm_params, tldr, cleaned_tldr)
                 repaired_cleaned_tldr = self._cleanup_tldr(repaired_tldr)

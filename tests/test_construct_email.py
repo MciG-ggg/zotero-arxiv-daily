@@ -65,6 +65,38 @@ def test_render_email_strips_html_like_tags_from_tldr():
     assert "<plan>" not in html
 
 
+def test_render_email_recleans_stale_meta_tldr():
+    paper = make_sample_paper(
+        score=7.0,
+        tldr="用户要求我根据论文信息重新写一个TLDR摘要。实验表明，该方法在长期任务成功率和鲁棒性方面显著提升，泛化能力强。",
+    )
+    html = render_email([paper])
+    assert "实验表明，该方法在长期任务成功率和鲁棒性方面显著提升，泛化能力强。" in html
+    assert "用户要求我" not in html
+
+
+def test_render_email_falls_back_when_tldr_is_only_meta_scaffold():
+    paper = make_sample_paper(
+        score=7.0,
+        tldr="这是一篇关于机器人后训练的论文。一句话概括即可。",
+        abstract="Hi-WM提出了一种可扩展的机器人后训练框架。实验表明，该方法显著提升真实任务成功率。",
+    )
+    html = render_email([paper])
+    assert "Hi-WM提出了一种可扩展的机器人后训练框架。实验表明，该方法显著提升真实任务成功率。" in html
+    assert "一句话概括即可" not in html
+
+
+def test_render_email_falls_back_when_tldr_is_failure_message():
+    paper = make_sample_paper(
+        score=7.0,
+        tldr="Failed to generate TLDR. Neither full text nor abstract is provided",
+        abstract="This paper improves manipulation reliability. It adds view-consistent planning.",
+    )
+    html = render_email([paper])
+    assert "This paper improves manipulation reliability. It adds view-consistent planning." in html
+    assert "Failed to generate TLDR." not in html
+
+
 def test_render_email_separates_latest_and_classics():
     latest = [make_sample_paper(title="Latest Paper", score=7.0, tldr="latest")]
     classic = [

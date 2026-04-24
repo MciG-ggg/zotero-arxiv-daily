@@ -100,6 +100,16 @@ IDEATION_TLDR_RESPONSE = (
     "进一步精炼表述，确保信息精准且逻辑清晰。"
 )
 
+USER_REQUEST_TLDR_RESPONSE = (
+    "用户要求我根据论文信息重新写一个TLDR摘要。实验表明，该方法在长期任务成功率和鲁棒性方面显著提升，泛化能力强。"
+)
+
+DUPLICATED_TLDR_RESPONSE = (
+    "论文提出了一种名为AmelPred的自预测表征模型，用于无人机三维目标导航任务中的样本高效强化学习，"
+    "其随机版本AmelPredSto与演员-评论家算法结合效果最佳。"
+    "本研究提出了名为AmelPred的自预测表征模型用于无人机三维目标导航，其随机版本AmelPredSto在与演员-评论家强化学习算法结合时实现了最优的样本效率提升。"
+)
+
 
 def _make_chat_response(content: str) -> SimpleNamespace:
     return SimpleNamespace(

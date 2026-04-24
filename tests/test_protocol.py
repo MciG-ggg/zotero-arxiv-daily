@@ -23,6 +23,8 @@ from tests.canned_responses import (
     REPAIRED_TLDR_RESPONSE_CN,
     SENTENCE_LABEL_TLDR_RESPONSE,
     THREE_SENTENCE_TLDR_RESPONSE,
+    USER_REQUEST_TLDR_RESPONSE,
+    DUPLICATED_TLDR_RESPONSE,
     make_sample_paper,
     make_stub_openai_client,
     make_stub_openai_client_sequence,
@@ -279,6 +281,44 @@ def test_tldr_strips_chinese_ideation_scaffold(llm_params):
     assert result == "研究提出了一种名为AmelPred的自预测表示方法，其随机版本AmelPredSto能显著提升强化学习在无人机目标导航任务中的样本效率。"
     assert "构思" not in result
     assert "进一步精炼表述" not in result
+
+
+def test_tldr_strips_user_request_meta_sentence(llm_params):
+    client = make_stub_openai_client(USER_REQUEST_TLDR_RESPONSE)
+    paper = make_sample_paper()
+
+    result = paper.generate_tldr(client, {**llm_params, "language": "Chinese"})
+
+    assert result == "实验表明，该方法在长期任务成功率和鲁棒性方面显著提升，泛化能力强。"
+    assert "用户要求我" not in result
+
+
+def test_tldr_falls_back_to_source_when_meta_only_repair_stays_invalid(llm_params):
+    client = make_stub_openai_client_sequence(
+        "这是一篇关于机器人后训练的论文。一句话概括即可。",
+        "这是一篇关于机器人后训练的论文。一句话概括即可。",
+    )
+    paper = make_sample_paper(
+        abstract="Hi-WM提出了一种可扩展的机器人后训练框架。实验表明，该方法显著提升真实任务成功率。第三句不应出现。"
+    )
+
+    result = paper.generate_tldr(client, {**llm_params, "language": "Chinese"})
+
+    assert result == "Hi-WM提出了一种可扩展的机器人后训练框架。实验表明，该方法显著提升真实任务成功率。"
+    assert "这是一篇关于" not in result
+    assert "一句话概括即可" not in result
+
+
+def test_tldr_deduplicates_near_duplicate_sentences(llm_params):
+    client = make_stub_openai_client(DUPLICATED_TLDR_RESPONSE)
+    paper = make_sample_paper()
+
+    result = paper.generate_tldr(client, {**llm_params, "language": "Chinese"})
+
+    assert result == (
+        "论文提出了一种名为AmelPred的自预测表征模型，用于无人机三维目标导航任务中的样本高效强化学习，其随机版本AmelPredSto与演员-评论家算法结合效果最佳。"
+    )
+    assert _sentence_count(result) == 1
 
 
 def test_tldr_uses_chinese_native_prompt_when_language_is_chinese(llm_params):

@@ -156,8 +156,9 @@ def _truncate_affiliations(paper: Paper) -> str:
 
 def _safe_tldr(paper: Paper) -> str:
     tldr = re.sub(r"(?is)<[^>]+>", " ", paper.tldr or "")
+    tldr = paper._cleanup_tldr(tldr)
     tldr = re.sub(r"\s+", " ", tldr).strip()
-    if tldr:
+    if tldr and not paper._is_failure_tldr_message(tldr) and not paper._needs_tldr_repair(tldr, "English"):
         return tldr
 
     fallback = paper._fallback_tldr_from_source()
