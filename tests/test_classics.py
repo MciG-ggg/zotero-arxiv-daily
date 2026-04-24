@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 
 import pytest
 from omegaconf import open_dict
@@ -163,6 +164,22 @@ def test_openalex_retriever_excludes_llm_only_papers_without_robotics_terms(conf
     papers = OpenAlexClassicRetriever(config).retrieve_papers()
 
     assert [paper.title for paper in papers] == ["Humanoid robot manipulation with foundation models"]
+
+
+def test_openalex_request_params_are_scoped_to_recent_year_window(config):
+    with open_dict(config):
+        config.classics.enabled = True
+        config.classics.openalex.mailto = "test@example.com"
+        config.classics.max_publication_year = 9999
+        config.classics.max_age_years = 5
+
+    params = OpenAlexClassicRetriever(config)._build_request_params("robot learning")
+    current_year = datetime.now(timezone.utc).year
+    min_year = current_year - int(config.classics.max_age_years) + 1
+
+    assert f"from_publication_date:{min_year}-01-01" in params["filter"]
+    assert f"to_publication_date:{current_year}-12-31" in params["filter"]
+    assert params["mailto"] == "test@example.com"
 
 
 def test_classic_history_load_and_save_roundtrip(tmp_path):

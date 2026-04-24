@@ -10,6 +10,7 @@ from tqdm import tqdm
 from .classics import (
     OpenAlexClassicRetriever,
     _as_bool,
+    _paper_matches_topic_rules,
     get_paper_dedup_id,
     load_classic_history,
     save_classic_history,
@@ -48,6 +49,22 @@ class Executor:
         self.reranker = get_reranker_cls(config.executor.reranker)(config)
         self.openai_client = OpenAI(api_key=config.llm.api.key, base_url=config.llm.api.base_url)
         self.classic_retriever = OpenAlexClassicRetriever(config) if _as_bool(config.classics.enabled) else None
+
+    def _filter_latest_candidates_by_topic_rules(self, papers: list[Paper]) -> list[Paper]:
+        if self.classic_retriever is None or not papers:
+            return papers
+
+        filtered = [paper for paper in papers if _paper_matches_topic_rules(paper, self.config.classics)]
+        logger.info(
+            f"Retained {len(filtered)} latest candidates after explicit embodied-topic filtering "
+            f"(dropped {len(papers) - len(filtered)})"
+        )
+        if not filtered:
+            logger.warning(
+                "Explicit embodied-topic filtering removed all latest-paper candidates. "
+                "Check your arXiv categories and topic-filter keywords."
+            )
+        return filtered
 
     def fetch_zotero_corpus(self) -> list[CorpusPaper]:
         logger.info("Fetching zotero corpus")
@@ -113,7 +130,7 @@ class Executor:
             logger.info(f"Retrieved {len(papers)} {source} papers")
             all_papers.extend(papers)
         logger.info(f"Total {len(all_papers)} papers retrieved from all latest-paper sources")
-        return all_papers
+        return self._filter_latest_candidates_by_topic_rules(all_papers)
 
     def _retrieve_classic_papers(self, corpus: list[CorpusPaper]) -> list[Paper]:
         if self.classic_retriever is None:

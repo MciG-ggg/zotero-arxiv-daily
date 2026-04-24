@@ -156,12 +156,24 @@ class OpenAlexClassicRetriever:
                 "or config.classics.openalex.mailto."
             )
 
+    def _get_publication_year_bounds(self) -> tuple[int, int]:
+        current_year = datetime.now(timezone.utc).year
+        max_publication_year = min(int(self.classics_config.max_publication_year), current_year)
+        min_publication_year = current_year - int(self.classics_config.max_age_years) + 1
+        return min_publication_year, max_publication_year
+
     def _build_request_params(self, query: str) -> dict[str, str | int]:
+        min_publication_year, max_publication_year = self._get_publication_year_bounds()
         params: dict[str, str | int] = {
             "search": query,
             "sort": "cited_by_count:desc",
             "per-page": int(self.classics_config.candidate_pool_size),
-            "filter": "has_abstract:true,is_retracted:false",
+            "filter": (
+                "has_abstract:true,"
+                "is_retracted:false,"
+                f"from_publication_date:{min_publication_year}-01-01,"
+                f"to_publication_date:{max_publication_year}-12-31"
+            ),
         }
         if self.openalex_config.api_key:
             params["api_key"] = self.openalex_config.api_key
@@ -182,9 +194,7 @@ class OpenAlexClassicRetriever:
         if publication_year is None or cited_by_count is None:
             return None
 
-        current_year = datetime.now(timezone.utc).year
-        max_publication_year = min(int(self.classics_config.max_publication_year), current_year)
-        min_publication_year = current_year - int(self.classics_config.max_age_years) + 1
+        min_publication_year, max_publication_year = self._get_publication_year_bounds()
         if publication_year > max_publication_year:
             return None
         if publication_year < min_publication_year:
