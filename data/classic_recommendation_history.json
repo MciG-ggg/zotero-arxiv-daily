@@ -11,6 +11,24 @@
       "recommended_at": "2026-04-24T02:15:44.906252+00:00"
     },
     {
+      "id": "https://openalex.org/W3213517261",
+      "title": "A soft thumb-sized vision-based sensor with accurate all-round force perception",
+      "url": "https://doi.org/10.1038/s42256-021-00439-3",
+      "source": "openalex-classics",
+      "published_year": 2022,
+      "citation_count": 233,
+      "recommended_at": "2026-04-24T03:00:14.453331+00:00"
+    },
+    {
+      "id": "https://openalex.org/W4285149089",
+      "title": "Soft Pneumatic Actuators: A Review of Design, Fabrication, Modeling, Sensing, Control and Applications",
+      "url": "https://doi.org/10.1109/access.2022.3179589",
+      "source": "openalex-classics",
+      "published_year": 2022,
+      "citation_count": 342,
+      "recommended_at": "2026-04-24T03:00:14.453331+00:00"
+    },
+    {
       "id": "https://openalex.org/W4313442619",
       "title": "A review on reinforcement learning for contact-rich robotic manipulation tasks",
       "url": "https://doi.org/10.1016/j.rcim.2022.102517",
@@ -18,6 +36,15 @@
       "published_year": 2022,
       "citation_count": 137,
       "recommended_at": "2026-04-24T02:15:44.906252+00:00"
+    },
+    {
+      "id": "https://openalex.org/W4313453017",
+      "title": "Proactive human–robot collaboration: Mutual-cognitive, predictable, and self-organising perspectives",
+      "url": "https://doi.org/10.1016/j.rcim.2022.102510",
+      "source": "openalex-classics",
+      "published_year": 2022,
+      "citation_count": 238,
+      "recommended_at": "2026-04-24T03:00:14.453331+00:00"
     },
     {
       "id": "https://openalex.org/W4360584316",
@@ -29,6 +56,15 @@
       "recommended_at": "2026-04-24T02:15:44.906252+00:00"
     },
     {
+      "id": "https://openalex.org/W4362663195",
+      "title": "Artificial intelligence, machine learning and deep learning in advanced robotics, a review",
+      "url": "https://doi.org/10.1016/j.cogr.2023.04.001",
+      "source": "openalex-classics",
+      "published_year": 2023,
+      "citation_count": 1002,
+      "recommended_at": "2026-04-24T03:00:14.453331+00:00"
+    },
+    {
       "id": "https://openalex.org/W4385430674",
       "title": "Learning Fine-Grained Bimanual Manipulation with Low-Cost Hardware",
       "url": "https://doi.org/10.15607/rss.2023.xix.016",
@@ -36,6 +72,15 @@
       "published_year": 2023,
       "citation_count": 422,
       "recommended_at": "2026-04-24T02:15:44.906252+00:00"
+    },
+    {
+      "id": "https://openalex.org/W4386285856",
+      "title": "Champion-level drone racing using deep reinforcement learning",
+      "url": "https://doi.org/10.1038/s41586-023-06419-4",
+      "source": "openalex-classics",
+      "published_year": 2023,
+      "citation_count": 540,
+      "recommended_at": "2026-04-24T03:00:14.453331+00:00"
     },
     {
       "id": "https://openalex.org/W4403337227",
