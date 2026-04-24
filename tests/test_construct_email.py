@@ -58,6 +58,13 @@ def test_render_email_uses_fallback_when_tldr_is_empty():
     assert "This paper improves manipulation reliability. It adds view-consistent planning." in html
 
 
+def test_render_email_strips_html_like_tags_from_tldr():
+    paper = make_sample_paper(score=7.0, tldr="<plan>Safe summary.</plan>")
+    html = render_email([paper])
+    assert "Safe summary." in html
+    assert "<plan>" not in html
+
+
 def test_render_email_separates_latest_and_classics():
     latest = [make_sample_paper(title="Latest Paper", score=7.0, tldr="latest")]
     classic = [

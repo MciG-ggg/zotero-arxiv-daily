@@ -92,6 +92,14 @@ DECIMAL_PERCENT_TLDR_RESPONSE = (
     "将物理执行约束转变为可重用的交互式纠错过程。实验表明，该方法在三个真实机械臂操作任务上将成功率平均提升37.5%。"
 )
 
+HTML_TAGGED_TLDR_RESPONSE = "<plan>该方法显著提升了操作成功率，并增强了跨视角鲁棒性。</plan>"
+
+IDEATION_TLDR_RESPONSE = (
+    "构思： 第一句（结论）：研究提出了一种名为AmelPred的自预测表示方法，"
+    "其随机版本AmelPredSto能显著提升强化学习在无人机目标导航任务中的样本效率。"
+    "进一步精炼表述，确保信息精准且逻辑清晰。"
+)
+
 
 def _make_chat_response(content: str) -> SimpleNamespace:
     return SimpleNamespace(

@@ -13,6 +13,8 @@ from tests.canned_responses import (
     DECIMAL_PERCENT_TLDR_RESPONSE,
     EMPTY_TLDR_RESPONSE,
     ENGLISH_ONLY_TLDR_RESPONSE,
+    HTML_TAGGED_TLDR_RESPONSE,
+    IDEATION_TLDR_RESPONSE,
     MARKDOWN_TLDR_RESPONSE,
     MIXED_TLDR_RESPONSE_CN_WITH_EN_META,
     NOISY_TLDR_RESPONSE_CN,
@@ -256,6 +258,27 @@ def test_tldr_preserves_decimal_percentages_without_truncation(llm_params):
     assert result == DECIMAL_PERCENT_TLDR_RESPONSE
     assert "37.5%" in result
     assert _sentence_count(result) == 2
+
+
+def test_tldr_strips_html_like_tags_from_model_output(llm_params):
+    client = make_stub_openai_client(HTML_TAGGED_TLDR_RESPONSE)
+    paper = make_sample_paper()
+
+    result = paper.generate_tldr(client, {**llm_params, "language": "Chinese"})
+
+    assert result == "该方法显著提升了操作成功率，并增强了跨视角鲁棒性。"
+    assert "<plan>" not in result
+
+
+def test_tldr_strips_chinese_ideation_scaffold(llm_params):
+    client = make_stub_openai_client(IDEATION_TLDR_RESPONSE)
+    paper = make_sample_paper()
+
+    result = paper.generate_tldr(client, {**llm_params, "language": "Chinese"})
+
+    assert result == "研究提出了一种名为AmelPred的自预测表示方法，其随机版本AmelPredSto能显著提升强化学习在无人机目标导航任务中的样本效率。"
+    assert "构思" not in result
+    assert "进一步精炼表述" not in result
 
 
 def test_tldr_uses_chinese_native_prompt_when_language_is_chinese(llm_params):

@@ -1,5 +1,8 @@
 import math
 
+import re
+from html import escape
+
 from .protocol import Paper
 
 
@@ -107,12 +110,12 @@ def get_block_html(
 </table>
 """
     return block_template.format(
-        title=title,
-        authors=authors,
-        rate=rate,
-        tldr=tldr,
-        pdf_url=pdf_url,
-        affiliations=affiliations,
+        title=escape(str(title)),
+        authors=escape(str(authors)),
+        rate=escape(str(rate)),
+        tldr=escape(str(tldr)),
+        pdf_url=escape(str(pdf_url), quote=True),
+        affiliations=escape(str(affiliations)),
         detail_html=detail_html,
     )
 
@@ -152,7 +155,8 @@ def _truncate_affiliations(paper: Paper) -> str:
 
 
 def _safe_tldr(paper: Paper) -> str:
-    tldr = (paper.tldr or "").strip()
+    tldr = re.sub(r"(?is)<[^>]+>", " ", paper.tldr or "")
+    tldr = re.sub(r"\s+", " ", tldr).strip()
     if tldr:
         return tldr
 

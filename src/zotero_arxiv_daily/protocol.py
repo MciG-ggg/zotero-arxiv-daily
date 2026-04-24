@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional, TypeVar
 from datetime import datetime
+import html
 import re
 import tiktoken
 from openai import OpenAI
@@ -56,7 +57,8 @@ class Paper:
             r"combined|or\s+shorter|shorter(?:\s+version)?|or\s+more\s+concisely(?:\s+focusing\s+on\s+the\s+conclusion)?|"
             r"sentence\s*[12](?:\s*\([^)]*\))?|main\s+conclusion(?:\s+sentence)?|conclusion(?:\s+sentence)?|"
             r"key\s+method(?:\s*/\s*mechanism)?(?:\s*\([^)]*\))?|method(?:\s*/\s*mechanism)?|"
-            r"更简洁地说|更简短地说|更简洁版本|组合版|合并版|结论句|方法句)"
+            r"更简洁地说|更简短地说|更简洁版本|组合版|合并版|结论句|方法句|"
+            r"构思|思路|草稿|第[一二两123]+句(?:（[^）]+）)?)"
             r"(?:\*\*)?\s*[:：-]?\s*"
         )
         return prefix_pattern.sub("", text, count=1).strip()
@@ -111,8 +113,9 @@ class Paper:
             r"the application context|let me check if this meets the requirements|extra analysis|"
             r"supplementary note|supplementary explanation|this is one sentence|this is two sentences|"
             r"or shorter|combined|sentence\s*[12]|"
+            r"ideation|draft|"
             r"让我|先来看|下面|核心要点|关键要点|总结如下|最终优化|先总结|简要总结|补充说明|额外分析|"
-            r"让我检查|检查是否符合要求"
+            r"让我检查|检查是否符合要求|构思|思路|草稿|进一步精炼表述|确保信息精准且逻辑清晰"
             r")"
         )
         meta_leak_pattern = re.compile(
@@ -253,13 +256,16 @@ class Paper:
             return text
 
         text = text.replace("\r\n", "\n").replace("\r", "\n")
+        text = html.unescape(text)
         text = re.sub(r"(?<=\d)\s*\.\s*(?=\d)", ".", text)
         text = re.sub(r"\[(.*?)\]\((.*?)\)", r"\1", text)
+        text = re.sub(r"(?is)<[^>\n]+>", " ", text)
         text = re.sub(r"[*_`#>✓✔✗✘]", "", text)
         text = self._extract_tldr_segment(text)
         text = self._prefer_last_alternative_segment(text)
         text = re.sub(r"(?is)\bSentence\s*1(?:\s*\([^)]*\))?\s*[:：-]\s*", "", text)
         text = re.sub(r"(?is)\bSentence\s*2(?:\s*\([^)]*\))?\s*[:：-]\s*", " ", text)
+        text = re.sub(r"(?is)第[一二两123]+句(?:（[^）]+）)?\s*[:：-]\s*", "", text)
         text = self._strip_surrounding_quotes(text)
 
         cleaned_lines: list[str] = []
