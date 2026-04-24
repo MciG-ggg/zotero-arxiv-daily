@@ -3,7 +3,7 @@ import arxiv
 from arxiv import Result as ArxivResult
 from ..protocol import Paper
 from ..utils import extract_markdown_from_pdf, extract_tex_code_from_tar
-from ..classics import _as_bool
+from ..classics import _as_bool, _paper_matches_topic_rules
 from tempfile import TemporaryDirectory
 import feedparser
 from tqdm import tqdm
@@ -139,6 +139,27 @@ class ArxivRetriever(BaseRetriever):
             bar.update(len(batch))
             raw_papers.extend(batch)
         bar.close()
+
+        if _as_bool(self.config.classics.enabled):
+            filtered_raw_papers = [
+                paper for paper in raw_papers
+                if _paper_matches_topic_rules(
+                    Paper(
+                        source=self.name,
+                        title=paper.title,
+                        authors=[author.name for author in paper.authors],
+                        abstract=paper.summary,
+                        url=paper.entry_id,
+                        pdf_url=paper.pdf_url,
+                    ),
+                    self.config.classics,
+                )
+            ]
+            logger.info(
+                f"Retained {len(filtered_raw_papers)} arXiv papers after early embodied-topic filtering "
+                f"(dropped {len(raw_papers) - len(filtered_raw_papers)})"
+            )
+            raw_papers = filtered_raw_papers
 
         return raw_papers
 

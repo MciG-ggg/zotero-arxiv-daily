@@ -4,6 +4,7 @@ import time
 from types import SimpleNamespace
 
 import feedparser
+from omegaconf import open_dict
 
 from zotero_arxiv_daily.retriever.arxiv_retriever import ArxivRetriever, _run_with_hard_timeout
 import zotero_arxiv_daily.retriever.arxiv_retriever as arxiv_retriever
@@ -61,6 +62,52 @@ def test_arxiv_retriever(config, mock_feedparser, monkeypatch):
 
     assert len(papers) == len(new_entries)
     assert set(p.title for p in papers) == set(e.title for e in new_entries)
+
+
+def test_arxiv_retriever_prefilters_off_topic_papers_when_classics_enabled(config, mock_feedparser, monkeypatch):
+    monkeypatch.setattr("zotero_arxiv_daily.retriever.base.sleep", lambda _: None)
+
+    with open_dict(config):
+        config.classics.enabled = True
+        config.classics.topic_filter.keywords = ["embodied", "robot", "manipulation", "visuomotor"]
+        config.classics.topic_filter.required_keywords_any = ["robot", "manipulation", "visuomotor"]
+        config.classics.topic_filter.min_keyword_matches = 2
+
+    fake_results = [
+        SimpleNamespace(
+            title="Embodied robot manipulation policy",
+            authors=[SimpleNamespace(name="Test Author")],
+            summary="A visuomotor robot learns manipulation from demonstrations.",
+            pdf_url="https://arxiv.org/pdf/keep",
+            entry_id="https://arxiv.org/abs/keep",
+            source_url=lambda: "https://arxiv.org/e-print/keep",
+        ),
+        SimpleNamespace(
+            title="Generic language model benchmark",
+            authors=[SimpleNamespace(name="Test Author")],
+            summary="A benchmark for large language models and reasoning tasks.",
+            pdf_url="https://arxiv.org/pdf/drop",
+            entry_id="https://arxiv.org/abs/drop",
+            source_url=lambda: "https://arxiv.org/e-print/drop",
+        ),
+    ]
+
+    class FakeClient:
+        def __init__(self, **kw):
+            pass
+
+        def results(self, search):
+            return iter(fake_results)
+
+    monkeypatch.setattr(arxiv_retriever.arxiv, "Client", FakeClient)
+    monkeypatch.setattr(arxiv_retriever, "extract_text_from_html", lambda paper: None)
+    monkeypatch.setattr(arxiv_retriever, "extract_text_from_pdf", lambda paper: None)
+    monkeypatch.setattr(arxiv_retriever, "extract_text_from_tar", lambda paper: None)
+
+    retriever = ArxivRetriever(config)
+    papers = retriever.retrieve_papers()
+
+    assert [paper.title for paper in papers] == ["Embodied robot manipulation policy"]
 
 
 def test_run_with_hard_timeout_returns_value():
