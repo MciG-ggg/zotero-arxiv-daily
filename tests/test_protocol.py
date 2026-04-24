@@ -6,12 +6,17 @@ import pytest
 
 from tests.canned_responses import (
     CLEAN_ONE_LINE_TLDR_RESPONSE,
+    EMPTY_TLDR_RESPONSE,
+    ENGLISH_ONLY_TLDR_RESPONSE,
     MARKDOWN_TLDR_RESPONSE,
+    MIXED_TLDR_RESPONSE_CN_WITH_EN_META,
     NOISY_TLDR_RESPONSE_CN,
     NOISY_TLDR_RESPONSE_EN,
+    REPAIRED_TLDR_RESPONSE_CN,
     THREE_SENTENCE_TLDR_RESPONSE,
     make_sample_paper,
     make_stub_openai_client,
+    make_stub_openai_client_sequence,
 )
 
 
@@ -132,6 +137,54 @@ def test_tldr_preserves_clean_one_line_summary(llm_params):
 
     assert result == "A compact summary stays intact after cleanup."
     assert paper.tldr == result
+
+
+def test_tldr_drops_english_requirement_leak_after_chinese_summary(llm_params):
+    client = make_stub_openai_client(MIXED_TLDR_RESPONSE_CN_WITH_EN_META)
+    paper = make_sample_paper()
+
+    result = paper.generate_tldr(client, {**llm_params, "language": "Chinese"})
+
+    assert result == "本研究针对无人机目标导航问题，提出了一种名为 AmelPred 的自预测表征模型，其随机版本 AmelPredSto 与演员-评论家强化学习结合后显著提升了样本效率和导航性能。"
+    assert "This captures" not in result
+    assert "requirements" not in result
+
+
+def test_tldr_repairs_english_only_output_into_chinese(llm_params):
+    client = make_stub_openai_client_sequence(
+        ENGLISH_ONLY_TLDR_RESPONSE,
+        REPAIRED_TLDR_RESPONSE_CN,
+    )
+    paper = make_sample_paper()
+
+    result = paper.generate_tldr(client, {**llm_params, "language": "Chinese"})
+
+    assert result == REPAIRED_TLDR_RESPONSE_CN
+    assert "The method improves sample efficiency" not in result
+    assert _sentence_count(result) == 2
+
+
+def test_tldr_falls_back_to_source_excerpt_after_empty_generation(llm_params):
+    client = make_stub_openai_client_sequence(
+        EMPTY_TLDR_RESPONSE,
+        EMPTY_TLDR_RESPONSE,
+    )
+    paper = make_sample_paper(
+        abstract=(
+            "This paper improves robot planning under sparse rewards. "
+            "It aligns intermediate subgoals with visual affordances. "
+            "A third sentence should not appear."
+        )
+    )
+
+    result = paper.generate_tldr(client, llm_params)
+
+    assert result == (
+        "This paper improves robot planning under sparse rewards. "
+        "It aligns intermediate subgoals with visual affordances."
+    )
+    assert "A third sentence should not appear." not in result
+    assert _sentence_count(result) == 2
 
 
 # ---------------------------------------------------------------------------

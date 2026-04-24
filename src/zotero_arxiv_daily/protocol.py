@@ -26,6 +26,21 @@ class Paper:
     dedup_id: Optional[str] = None
 
     @staticmethod
+    def _truncate_prompt(prompt: str, max_tokens: int) -> str:
+        enc = tiktoken.encoding_for_model("gpt-4o")
+        return enc.decode(enc.encode(prompt)[:max_tokens])
+
+    def _build_tldr_context(self) -> str:
+        context = ""
+        if self.title:
+            context += f"Title:\n{self.title}\n\n"
+        if self.abstract:
+            context += f"Abstract:\n{self.abstract}\n\n"
+        if self.full_text:
+            context += f"Preview of main content:\n{self.full_text}\n\n"
+        return context
+
+    @staticmethod
     def _extract_tldr_segment(text: str) -> str:
         marker_pattern = re.compile(
             r"(?is)(?:^|\n|\s)(?:\*\*)?(?:(?:final|最终)\s*)?(?:tl\s*;?\s*dr|summary|final\s+summary|摘要|总结|一句话总结)(?:\*\*)?\s*[:：-]\s*(.+)"
@@ -47,15 +62,123 @@ class Paper:
         return [sentence.strip() for sentence in sentences if sentence.strip()]
 
     @staticmethod
+    def _join_tldr_sentences(sentences: list[str]) -> str:
+        if not sentences:
+            return ""
+
+        result = sentences[0]
+        for sentence in sentences[1:]:
+            separator = "" if re.search(r"[。！？]\s*$", result) else " "
+            result += f"{separator}{sentence}"
+        return result
+
+    @staticmethod
     def _is_scaffold_sentence(text: str) -> bool:
         scaffold_pattern = re.compile(
             r"(?is)^\s*(?:"
             r"let me|let's|first[, ]|second[, ]|third[, ]|here(?:'s| is)|below is|the key points|key points|"
-            r"i will|we can|to summarize|in summary|overall[, ]|"
-            r"让我|先来看|下面|核心要点|关键要点|总结如下|最终优化|先总结|简要总结"
+            r"i will|we can|to summarize|in summary|overall[, ]|this captures|the previous draft|"
+            r"main conclusion|the main conclusion|key method|the key method|application context|"
+            r"the application context|let me check if this meets the requirements|extra analysis|"
+            r"supplementary note|supplementary explanation|"
+            r"让我|先来看|下面|核心要点|关键要点|总结如下|最终优化|先总结|简要总结|补充说明|额外分析|"
+            r"让我检查|检查是否符合要求"
             r")"
         )
-        return bool(scaffold_pattern.match(text))
+        meta_leak_pattern = re.compile(
+            r"(?is)(?:"
+            r"meets the requirements|no markdown|no labels|two sentences|one conclusion sentence|"
+            r"optional second sentence|return only the final|email-ready tldr|"
+            r"符合要求|不要 markdown|不要标签|两句话|一句结论|第二句"
+            r")"
+        )
+        return bool(scaffold_pattern.match(text)) or bool(meta_leak_pattern.search(text))
+
+    @staticmethod
+    def _targets_chinese(lang: str) -> bool:
+        normalized = (lang or "").strip().lower()
+        return "chinese" in normalized or "中文" in normalized or "简体" in normalized
+
+    @staticmethod
+    def _sentence_needs_chinese_repair(text: str) -> bool:
+        cjk_chars = len(re.findall(r"[\u3400-\u9fff]", text))
+        latin_words = len(re.findall(r"[A-Za-z]{2,}", text))
+        return cjk_chars == 0 and latin_words >= 3
+
+    @staticmethod
+    def _is_failure_tldr_message(text: str) -> bool:
+        return text.strip().startswith("Failed to generate TLDR.")
+
+    def _needs_tldr_repair(self, cleaned_tldr: str, lang: str) -> bool:
+        text = (cleaned_tldr or "").strip()
+        if not text:
+            return True
+        if self._is_failure_tldr_message(text):
+            return False
+
+        sentences = self._split_tldr_sentences(text) or [text]
+        if any(self._is_scaffold_sentence(sentence) for sentence in sentences):
+            return True
+
+        if self._targets_chinese(lang):
+            return any(self._sentence_needs_chinese_repair(sentence) for sentence in sentences)
+        return False
+
+    def _fallback_tldr_from_source(self) -> str:
+        source = self.abstract or self.full_text or self.title or ""
+        source = re.sub(r"\s+", " ", source).strip()
+        if not source:
+            return ""
+
+        sentences = []
+        for sentence in self._split_tldr_sentences(source):
+            sentence = sentence.strip()
+            if sentence:
+                sentences.append(sentence)
+            if len(sentences) == 2:
+                break
+
+        if sentences:
+            return self._join_tldr_sentences(sentences)
+        return source[:280].strip()
+
+    def _repair_tldr_with_llm(self, openai_client: OpenAI, llm_params: dict, raw_tldr: str, cleaned_tldr: str) -> str:
+        lang = llm_params.get('language', 'English')
+        prompt = (
+            f"The previous TLDR draft is invalid. Rewrite it as an email-ready TLDR in {lang}. "
+            "Return only the final TLDR text with no reasoning, bullets, markdown, or labels. "
+            "Use at most two sentences. Prefer one conclusion sentence, and use a second sentence only if needed to preserve the key method or mechanism. "
+            "Keep every claim grounded in the paper information below, and do not add affiliations or unsupported facts. "
+        )
+        if self._targets_chinese(lang):
+            prompt += (
+                "Write fully in Simplified Chinese. Keep Latin script only for official names such as model, method, benchmark, "
+                "or dataset names when necessary. "
+            )
+
+        draft = (cleaned_tldr or raw_tldr or "").strip()
+        if draft:
+            prompt += f"\n\nDraft to fix:\n{draft}\n\n"
+
+        prompt += self._build_tldr_context()
+        prompt = self._truncate_prompt(prompt, 4000)
+
+        response = openai_client.chat.completions.create(
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You repair malformed scientific-paper TLDR drafts. "
+                        f"Answer in {lang}. Return only the final TLDR text: at most two sentences, "
+                        "with one conclusion sentence preferred and an optional second sentence only for the key method or mechanism. "
+                        "Do not include reasoning, analysis, bullets, markdown, prefixes, or labels."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+            **llm_params.get('generation_kwargs', {})
+        )
+        return response.choices[0].message.content
 
     def _cleanup_tldr(self, raw_tldr: str) -> str:
         text = (raw_tldr or "").strip()
@@ -64,7 +187,7 @@ class Paper:
 
         text = text.replace("\r\n", "\n").replace("\r", "\n")
         text = re.sub(r"\[(.*?)\]\((.*?)\)", r"\1", text)
-        text = re.sub(r"[*_`#>]", "", text)
+        text = re.sub(r"[*_`#>✓✔✗✘]", "", text)
         text = self._extract_tldr_segment(text)
 
         cleaned_lines: list[str] = []
@@ -98,7 +221,7 @@ class Paper:
                 break
 
         if sentences:
-            return " ".join(sentences)
+            return self._join_tldr_sentences(sentences)
         return text
 
     def _generate_tldr_with_llm(self, openai_client: OpenAI, llm_params: dict) -> str:
@@ -106,26 +229,22 @@ class Paper:
         prompt = (
             f"Given the following information of a paper, write an email-ready TLDR in {lang}. "
             "Return only the final TLDR text with no reasoning, bullets, markdown, or labels. "
-            "Prefer a single conclusion sentence. Use a second sentence only when needed to preserve the key method or mechanism.\n\n"
+            "Prefer a single conclusion sentence. Use a second sentence only when needed to preserve the key method or mechanism. "
         )
-        if self.title:
-            prompt += f"Title:\n {self.title}\n\n"
-
-        if self.abstract:
-            prompt += f"Abstract: {self.abstract}\n\n"
-
-        if self.full_text:
-            prompt += f"Preview of main content:\n {self.full_text}\n\n"
+        if self._targets_chinese(lang):
+            prompt += (
+                "Write fully in Simplified Chinese. Keep Latin script only for official names such as model, method, "
+                "benchmark, or dataset names when necessary.\n\n"
+            )
+        else:
+            prompt += "\n\n"
+        prompt += self._build_tldr_context()
 
         if not self.full_text and not self.abstract:
             logger.warning(f"Neither full text nor abstract is provided for {self.url}")
             return "Failed to generate TLDR. Neither full text nor abstract is provided"
 
-        # use gpt-4o tokenizer for estimation
-        enc = tiktoken.encoding_for_model("gpt-4o")
-        prompt_tokens = enc.encode(prompt)
-        prompt_tokens = prompt_tokens[:4000]  # truncate to 4000 tokens
-        prompt = enc.decode(prompt_tokens)
+        prompt = self._truncate_prompt(prompt, 4000)
 
         response = openai_client.chat.completions.create(
             messages=[
@@ -147,8 +266,29 @@ class Paper:
 
     def generate_tldr(self, openai_client: OpenAI, llm_params: dict) -> str:
         try:
+            lang = llm_params.get('language', 'English')
             tldr = self._generate_tldr_with_llm(openai_client, llm_params)
+            if self._is_failure_tldr_message(tldr):
+                self.tldr = tldr
+                return tldr
+
             cleaned_tldr = self._cleanup_tldr(tldr)
+            if self._needs_tldr_repair(cleaned_tldr, lang):
+                logger.warning(f"TLDR output needs repair for {self.url}")
+                repaired_tldr = self._repair_tldr_with_llm(openai_client, llm_params, tldr, cleaned_tldr)
+                repaired_cleaned_tldr = self._cleanup_tldr(repaired_tldr)
+                if repaired_cleaned_tldr and not self._needs_tldr_repair(repaired_cleaned_tldr, lang):
+                    cleaned_tldr = repaired_cleaned_tldr
+                elif cleaned_tldr:
+                    logger.warning(f"Using best-effort TLDR after failed repair for {self.url}")
+                else:
+                    logger.warning(f"Falling back to source excerpt after invalid TLDR repair for {self.url}")
+                    cleaned_tldr = self._fallback_tldr_from_source()
+
+            if not cleaned_tldr:
+                logger.warning(f"Falling back to source excerpt after empty TLDR cleanup for {self.url}")
+                cleaned_tldr = self._fallback_tldr_from_source()
+
             self.tldr = cleaned_tldr
             return cleaned_tldr
         except Exception as e:

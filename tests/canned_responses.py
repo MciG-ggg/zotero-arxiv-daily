@@ -43,6 +43,26 @@ THREE_SENTENCE_TLDR_RESPONSE = (
 
 CLEAN_ONE_LINE_TLDR_RESPONSE = "  A compact summary stays intact after cleanup.  "
 
+ENGLISH_ONLY_TLDR_RESPONSE = (
+    "The method improves sample efficiency and navigation performance for autonomous UAV object-goal navigation. "
+    "It does so by combining AmelPredSto with an actor-critic reinforcement learning algorithm."
+)
+
+REPAIRED_TLDR_RESPONSE_CN = (
+    "该方法显著提升了自主无人机目标导航的样本效率和导航性能。"
+    "它通过将 AmelPredSto 与演员-评论家强化学习结合来实现这一点。"
+)
+
+EMPTY_TLDR_RESPONSE = "TLDR:"
+
+MIXED_TLDR_RESPONSE_CN_WITH_EN_META = (
+    "本研究针对无人机目标导航问题，提出了一种名为 AmelPred 的自预测表征模型，其随机版本 AmelPredSto 与演员-评论家强化学习结合后显著提升了样本效率和导航性能。 "
+    "This captures: The main conclusion: improved sample efficiency and navigation performance "
+    "The key method: AmelPredSto with actor-critic RL algorithms "
+    "The application context: UAV object-goal navigation "
+    "Let me check if this meets the requirements: Two sentences ✓ Chinese ✓ No markdown/bullets/labels ✓"
+)
+
 
 def _make_chat_response(content: str) -> SimpleNamespace:
     return SimpleNamespace(
@@ -83,6 +103,28 @@ def make_stub_openai_client(tldr_response: str = _TLDR_RESPONSE):
         if _AFFILIATION_MARKER in request_str:
             return _make_chat_response(_AFFILIATION_RESPONSE)
         return _make_chat_response(tldr_response)
+
+    return SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(create=create_chat_completion),
+        ),
+        embeddings=SimpleNamespace(create=_stub_embeddings_create),
+    )
+
+
+def make_stub_openai_client_sequence(*tldr_responses: str):
+    responses = list(tldr_responses) or [_TLDR_RESPONSE]
+    index = {"value": 0}
+
+    def create_chat_completion(**kwargs):
+        messages = kwargs.get("messages", [])
+        request_str = str(messages)
+        if _AFFILIATION_MARKER in request_str:
+            return _make_chat_response(_AFFILIATION_RESPONSE)
+
+        current = responses[min(index["value"], len(responses) - 1)]
+        index["value"] += 1
+        return _make_chat_response(current)
 
     return SimpleNamespace(
         chat=SimpleNamespace(
