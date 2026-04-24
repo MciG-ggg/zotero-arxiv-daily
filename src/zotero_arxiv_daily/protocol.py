@@ -196,35 +196,50 @@ class Paper:
 
     def _repair_tldr_with_llm(self, openai_client: OpenAI, llm_params: dict, raw_tldr: str, cleaned_tldr: str) -> str:
         lang = llm_params.get('language', 'English')
-        prompt = (
-            f"The previous TLDR draft is invalid. Rewrite it as an email-ready TLDR in {lang}. "
-            "Return only the final TLDR text with no reasoning, bullets, markdown, or labels. "
-            "Use at most two sentences. Prefer one conclusion sentence, and use a second sentence only if needed to preserve the key method or mechanism. "
-            "Keep every claim grounded in the paper information below, and do not add affiliations or unsupported facts. "
-        )
         if self._targets_chinese(lang):
-            prompt += (
-                "Write fully in Simplified Chinese. Keep Latin script only for official names such as model, method, benchmark, "
-                "or dataset names when necessary. "
+            prompt = (
+                "上一个TLDR草稿不合格。请基于下面论文信息重新写成适合邮件直接展示的TLDR。"
+                "只输出最终TLDR正文，不要解释、不要分析、不要项目符号、不要Markdown、不要标签。"
+                "最多两句，优先一句结论，第二句仅在必须保留关键方法或机制时使用。"
+                "请使用简体中文，除模型、方法、数据集或基准的正式名称外尽量不要保留英文。"
+                "所有表述必须以论文信息为依据，不要补充 affiliations 或无依据事实。"
+            )
+        else:
+            prompt = (
+                f"The previous TLDR draft is invalid. Rewrite it as an email-ready TLDR in {lang}. "
+                "Return only the final TLDR text with no reasoning, bullets, markdown, or labels. "
+                "Use at most two sentences. Prefer one conclusion sentence, and use a second sentence only if needed to preserve the key method or mechanism. "
+                "Keep every claim grounded in the paper information below, and do not add affiliations or unsupported facts. "
             )
 
         draft = (cleaned_tldr or raw_tldr or "").strip()
         if draft:
-            prompt += f"\n\nDraft to fix:\n{draft}\n\n"
+            if self._targets_chinese(lang):
+                prompt += f"\n\n待修正草稿：\n{draft}\n\n"
+            else:
+                prompt += f"\n\nDraft to fix:\n{draft}\n\n"
 
         prompt += self._build_tldr_context()
         prompt = self._truncate_prompt(prompt, 4000)
+
+        system_content = (
+            "You repair malformed scientific-paper TLDR drafts. "
+            f"Answer in {lang}. Return only the final TLDR text: at most two sentences, "
+            "with one conclusion sentence preferred and an optional second sentence only for the key method or mechanism. "
+            "Do not include reasoning, analysis, bullets, markdown, prefixes, or labels."
+        )
+        if self._targets_chinese(lang):
+            system_content = (
+                "你负责修复不合格的论文TLDR草稿。"
+                "只输出最终TLDR正文，使用简体中文；最多两句，优先一句结论，第二句仅在必须保留关键方法或机制时使用。"
+                "不要输出推理、分析、项目符号、Markdown、前缀或标签。"
+            )
 
         response = openai_client.chat.completions.create(
             messages=[
                 {
                     "role": "system",
-                    "content": (
-                        "You repair malformed scientific-paper TLDR drafts. "
-                        f"Answer in {lang}. Return only the final TLDR text: at most two sentences, "
-                        "with one conclusion sentence preferred and an optional second sentence only for the key method or mechanism. "
-                        "Do not include reasoning, analysis, bullets, markdown, prefixes, or labels."
-                    ),
+                    "content": system_content,
                 },
                 {"role": "user", "content": prompt},
             ],
@@ -285,18 +300,19 @@ class Paper:
 
     def _generate_tldr_with_llm(self, openai_client: OpenAI, llm_params: dict) -> str:
         lang = llm_params.get('language', 'English')
-        prompt = (
-            f"Given the following information of a paper, write an email-ready TLDR in {lang}. "
-            "Return only the final TLDR text with no reasoning, bullets, markdown, or labels. "
-            "Prefer a single conclusion sentence. Use a second sentence only when needed to preserve the key method or mechanism. "
-        )
         if self._targets_chinese(lang):
-            prompt += (
-                "Write fully in Simplified Chinese. Keep Latin script only for official names such as model, method, "
-                "benchmark, or dataset names when necessary.\n\n"
+            prompt = (
+                "请根据下面论文信息写一段适合邮件直接展示的TLDR。"
+                "只输出最终TLDR正文，不要解释、不要分析、不要项目符号、不要Markdown、不要标签。"
+                "最多两句，优先一句结论，第二句仅在必须保留关键方法或机制时使用。"
+                "请使用简体中文，除模型、方法、数据集或基准的正式名称外尽量不要保留英文。\n\n"
             )
         else:
-            prompt += "\n\n"
+            prompt = (
+                f"Given the following information of a paper, write an email-ready TLDR in {lang}. "
+                "Return only the final TLDR text with no reasoning, bullets, markdown, or labels. "
+                "Prefer a single conclusion sentence. Use a second sentence only when needed to preserve the key method or mechanism.\n\n"
+            )
         prompt += self._build_tldr_context()
 
         if not self.full_text and not self.abstract:
@@ -305,16 +321,24 @@ class Paper:
 
         prompt = self._truncate_prompt(prompt, 4000)
 
+        system_content = (
+            "You are an assistant who summarizes scientific papers for email readers. "
+            f"Answer in {lang}. Return only the final TLDR text: at most two sentences, "
+            "with one conclusion sentence preferred and an optional second sentence only for the key method or mechanism. "
+            "Do not include reasoning, analysis, bullets, markdown, prefixes, or labels."
+        )
+        if self._targets_chinese(lang):
+            system_content = (
+                "你负责为科研论文生成可直接发送邮件的TLDR。"
+                "只输出最终TLDR正文，使用简体中文；最多两句，优先一句结论，第二句仅在必须保留关键方法或机制时使用。"
+                "不要输出推理、分析、项目符号、Markdown、前缀或标签。"
+            )
+
         response = openai_client.chat.completions.create(
             messages=[
                 {
                     "role": "system",
-                    "content": (
-                        "You are an assistant who summarizes scientific papers for email readers. "
-                        f"Answer in {lang}. Return only the final TLDR text: at most two sentences, "
-                        "with one conclusion sentence preferred and an optional second sentence only for the key method or mechanism. "
-                        "Do not include reasoning, analysis, bullets, markdown, prefixes, or labels."
-                    ),
+                    "content": system_content,
                 },
                 {"role": "user", "content": prompt},
             ],

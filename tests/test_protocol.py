@@ -1,6 +1,7 @@
 """Tests for zotero_arxiv_daily.protocol: Paper.generate_tldr, Paper.generate_affiliations."""
 
 import re
+from types import SimpleNamespace
 
 import pytest
 
@@ -255,6 +256,63 @@ def test_tldr_preserves_decimal_percentages_without_truncation(llm_params):
     assert result == DECIMAL_PERCENT_TLDR_RESPONSE
     assert "37.5%" in result
     assert _sentence_count(result) == 2
+
+
+def test_tldr_uses_chinese_native_prompt_when_language_is_chinese(llm_params):
+    captured_messages = []
+
+    def create_chat_completion(**kwargs):
+        captured_messages.append(kwargs["messages"])
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="中文TLDR。"))]
+        )
+
+    client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(create=create_chat_completion)
+        )
+    )
+    paper = make_sample_paper()
+
+    result = paper.generate_tldr(client, {**llm_params, "language": "Chinese"})
+
+    assert result == "中文TLDR。"
+    assert len(captured_messages) == 1
+    system_message = captured_messages[0][0]["content"]
+    user_message = captured_messages[0][1]["content"]
+    assert "简体中文" in system_message
+    assert "简体中文" in user_message
+    assert "Given the following information of a paper" not in user_message
+
+
+def test_tldr_uses_chinese_native_repair_prompt_when_cleanup_detects_invalid_output(llm_params):
+    captured_messages = []
+    responses = iter([
+        ENGLISH_ONLY_TLDR_RESPONSE,
+        REPAIRED_TLDR_RESPONSE_CN,
+    ])
+
+    def create_chat_completion(**kwargs):
+        captured_messages.append(kwargs["messages"])
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=next(responses)))]
+        )
+
+    client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(create=create_chat_completion)
+        )
+    )
+    paper = make_sample_paper()
+
+    result = paper.generate_tldr(client, {**llm_params, "language": "Chinese"})
+
+    assert result == REPAIRED_TLDR_RESPONSE_CN
+    assert len(captured_messages) == 2
+    repair_system_message = captured_messages[1][0]["content"]
+    repair_user_message = captured_messages[1][1]["content"]
+    assert "简体中文" in repair_system_message
+    assert "待修正草稿" in repair_user_message
 
 
 # ---------------------------------------------------------------------------
