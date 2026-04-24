@@ -14,6 +14,35 @@ _AFFILIATION_MARKER = "You are an assistant who perfectly extracts affiliations"
 _AFFILIATION_RESPONSE = '["TsingHua University","Peking University"]'
 _TLDR_RESPONSE = "Hello! How can I assist you today?"
 
+NOISY_TLDR_RESPONSE_CN = (
+    "让我先理解这篇论文的核心要素。\n"
+    "1. 分析问题背景。\n"
+    "2. 提炼主要贡献。\n"
+    "摘要：该方法显著提升了多模态检索的准确率。它通过跨模态对齐保留关键机制。\n"
+    "补充说明：这里是额外分析。"
+)
+
+NOISY_TLDR_RESPONSE_EN = (
+    "Let me break this down first.\n"
+    "- Key idea\n"
+    "- Evidence\n"
+    "Final TL;DR: The model improves retrieval accuracy on long-context documents. It does so via a hierarchical memory mechanism.\n"
+    "Extra analysis: this sentence should not survive."
+)
+
+MARKDOWN_TLDR_RESPONSE = (
+    "**TLDR**: - The pipeline cuts hallucinations in agent traces.\n"
+    "- It adds verifier-gated checkpoints."
+)
+
+THREE_SENTENCE_TLDR_RESPONSE = (
+    "The method improves theorem proving accuracy on competition benchmarks. "
+    "It uses retrieval-augmented search to preserve key premises. "
+    "It also reduces inference costs through speculative decoding."
+)
+
+CLEAN_ONE_LINE_TLDR_RESPONSE = "  A compact summary stays intact after cleanup.  "
+
 
 def _make_chat_response(content: str) -> SimpleNamespace:
     return SimpleNamespace(
@@ -31,14 +60,6 @@ def _make_chat_response(content: str) -> SimpleNamespace:
     )
 
 
-def _stub_chat_create(**kwargs):
-    messages = kwargs.get("messages", [])
-    request_str = str(messages)
-    if _AFFILIATION_MARKER in request_str:
-        return _make_chat_response(_AFFILIATION_RESPONSE)
-    return _make_chat_response(_TLDR_RESPONSE)
-
-
 def _stub_embeddings_create(**kwargs):
     inputs = kwargs.get("input", [])
     n = len(inputs) if isinstance(inputs, list) else 1
@@ -49,15 +70,23 @@ def _stub_embeddings_create(**kwargs):
     )
 
 
-def make_stub_openai_client():
+def make_stub_openai_client(tldr_response: str = _TLDR_RESPONSE):
     """Return a SimpleNamespace that quacks like openai.OpenAI().
 
     chat.completions.create() and embeddings.create() behave identically
     to the Docker mock_openai server that CI previously relied on.
     """
+
+    def create_chat_completion(**kwargs):
+        messages = kwargs.get("messages", [])
+        request_str = str(messages)
+        if _AFFILIATION_MARKER in request_str:
+            return _make_chat_response(_AFFILIATION_RESPONSE)
+        return _make_chat_response(tldr_response)
+
     return SimpleNamespace(
         chat=SimpleNamespace(
-            completions=SimpleNamespace(create=_stub_chat_create),
+            completions=SimpleNamespace(create=create_chat_completion),
         ),
         embeddings=SimpleNamespace(create=_stub_embeddings_create),
     )

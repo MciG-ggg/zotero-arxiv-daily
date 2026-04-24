@@ -1,8 +1,18 @@
 """Tests for zotero_arxiv_daily.protocol: Paper.generate_tldr, Paper.generate_affiliations."""
 
+import re
+
 import pytest
 
-from tests.canned_responses import make_sample_paper, make_stub_openai_client
+from tests.canned_responses import (
+    CLEAN_ONE_LINE_TLDR_RESPONSE,
+    MARKDOWN_TLDR_RESPONSE,
+    NOISY_TLDR_RESPONSE_CN,
+    NOISY_TLDR_RESPONSE_EN,
+    THREE_SENTENCE_TLDR_RESPONSE,
+    make_sample_paper,
+    make_stub_openai_client,
+)
 
 
 @pytest.fixture()
@@ -53,6 +63,75 @@ def test_tldr_truncates_long_prompt(llm_params):
     paper = make_sample_paper(full_text="word " * 10000)
     result = paper.generate_tldr(client, llm_params)
     assert result is not None
+
+
+def _sentence_count(text: str) -> int:
+    fragments = [fragment.strip() for fragment in re.split(r"(?<=[.!?。！？])\s*", text) if fragment.strip()]
+    return len(fragments)
+
+
+def test_tldr_keeps_only_final_summary_for_mixed_chinese_output(llm_params):
+    client = make_stub_openai_client(NOISY_TLDR_RESPONSE_CN)
+    paper = make_sample_paper()
+
+    result = paper.generate_tldr(client, {**llm_params, "language": "Chinese"})
+
+    assert "该方法显著提升了多模态检索的准确率" in result
+    assert "它通过跨模态对齐保留关键机制" in result
+    assert "让我先理解" not in result
+    assert "分析问题背景" not in result
+    assert "TLDR" not in result
+    assert "摘要" not in result
+    assert _sentence_count(result) <= 2
+
+
+def test_tldr_keeps_only_final_summary_for_mixed_english_output(llm_params):
+    client = make_stub_openai_client(NOISY_TLDR_RESPONSE_EN)
+    paper = make_sample_paper()
+
+    result = paper.generate_tldr(client, llm_params)
+
+    assert "The model improves retrieval accuracy on long-context documents." in result
+    assert "It does so via a hierarchical memory mechanism." in result
+    assert "Let me break this down first" not in result
+    assert "Key idea" not in result
+    assert "TL;DR" not in result
+    assert _sentence_count(result) <= 2
+
+
+def test_tldr_strips_markdown_wrappers_and_prefixes(llm_params):
+    client = make_stub_openai_client(MARKDOWN_TLDR_RESPONSE)
+    paper = make_sample_paper()
+
+    result = paper.generate_tldr(client, llm_params)
+
+    assert result.startswith("The pipeline cuts hallucinations in agent traces.")
+    assert "It adds verifier-gated checkpoints." in result
+    assert "**" not in result
+    assert "TLDR" not in result
+    assert "- " not in result
+
+
+def test_tldr_caps_summary_at_two_sentences(llm_params):
+    client = make_stub_openai_client(THREE_SENTENCE_TLDR_RESPONSE)
+    paper = make_sample_paper()
+
+    result = paper.generate_tldr(client, llm_params)
+
+    assert result.startswith("The method improves theorem proving accuracy on competition benchmarks.")
+    assert "It uses retrieval-augmented search to preserve key premises." in result
+    assert "It also reduces inference costs through speculative decoding." not in result
+    assert _sentence_count(result) == 2
+
+
+def test_tldr_preserves_clean_one_line_summary(llm_params):
+    client = make_stub_openai_client(CLEAN_ONE_LINE_TLDR_RESPONSE)
+    paper = make_sample_paper()
+
+    result = paper.generate_tldr(client, llm_params)
+
+    assert result == "A compact summary stays intact after cleanup."
+    assert paper.tldr == result
 
 
 # ---------------------------------------------------------------------------
