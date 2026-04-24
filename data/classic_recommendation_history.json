@@ -83,6 +83,15 @@
       "recommended_at": "2026-04-24T03:00:14.453331+00:00"
     },
     {
+      "id": "https://openalex.org/W4402354047",
+      "title": "DROID: A Large-Scale In-The-Wild Robot Manipulation Dataset",
+      "url": "https://doi.org/10.15607/rss.2024.xx.120",
+      "source": "openalex-classics",
+      "published_year": 2024,
+      "citation_count": 100,
+      "recommended_at": "2026-04-24T05:14:08.019802+00:00"
+    },
+    {
       "id": "https://openalex.org/W4403337227",
       "title": "Diffusion policy: Visuomotor policy learning via action diffusion",
       "url": "https://doi.org/10.1177/02783649241273668",
