@@ -1,6 +1,7 @@
 import requests
 from .base import BaseRetriever, register_retriever
 from ..protocol import Paper
+from ..classics import _as_bool
 from loguru import logger
 from typing import Any
 from time import sleep
@@ -39,7 +40,7 @@ class BiorxivRetriever(BaseRetriever):
         collection = [c for c in collection if c['date'] == latest_date]
         categories = [c.lower() for c in self.retriever_config.category]
         collection = [c for c in collection if c['category'] in categories]
-        if self.config.executor.debug:
+        if _as_bool(self.config.executor.debug):
             collection = collection[:10]
         return collection
 

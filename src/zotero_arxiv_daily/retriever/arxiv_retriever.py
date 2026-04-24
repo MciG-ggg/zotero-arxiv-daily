@@ -3,6 +3,7 @@ import arxiv
 from arxiv import Result as ArxivResult
 from ..protocol import Paper
 from ..utils import extract_markdown_from_pdf, extract_tex_code_from_tar
+from ..classics import _as_bool
 from tempfile import TemporaryDirectory
 import feedparser
 from tqdm import tqdm
@@ -127,7 +128,7 @@ class ArxivRetriever(BaseRetriever):
             for i in feed.entries
             if i.get("arxiv_announce_type", "new") in allowed_announce_types
         ]
-        if self.config.executor.debug:
+        if _as_bool(self.config.executor.debug):
             all_paper_ids = all_paper_ids[:10]
 
         # Get full information of each paper from arxiv api

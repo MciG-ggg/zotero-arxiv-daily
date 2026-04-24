@@ -1,4 +1,5 @@
 from .base import BaseReranker, register_reranker
+from ..classics import _as_bool
 import logging
 import warnings
 import numpy as np
@@ -6,7 +7,7 @@ import numpy as np
 class LocalReranker(BaseReranker):
     def get_similarity_score(self, s1: list[str], s2: list[str]) -> np.ndarray:
         from sentence_transformers import SentenceTransformer
-        if not self.config.executor.debug:
+        if not _as_bool(self.config.executor.debug):
             from transformers.utils import logging as transformers_logging
             from huggingface_hub.utils import logging as hf_logging
     
