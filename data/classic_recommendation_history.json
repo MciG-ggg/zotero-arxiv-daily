@@ -1,4 +1,50 @@
 {
   "version": 1,
-  "recommended": []
+  "recommended": [
+    {
+      "id": "https://openalex.org/W3195968524",
+      "title": "Safe Learning in Robotics: From Learning-Based Control to Safe Reinforcement Learning",
+      "url": "https://doi.org/10.1146/annurev-control-042920-020211",
+      "source": "openalex-classics",
+      "published_year": 2022,
+      "citation_count": 634,
+      "recommended_at": "2026-04-24T02:15:44.906252+00:00"
+    },
+    {
+      "id": "https://openalex.org/W4313442619",
+      "title": "A review on reinforcement learning for contact-rich robotic manipulation tasks",
+      "url": "https://doi.org/10.1016/j.rcim.2022.102517",
+      "source": "openalex-classics",
+      "published_year": 2022,
+      "citation_count": 137,
+      "recommended_at": "2026-04-24T02:15:44.906252+00:00"
+    },
+    {
+      "id": "https://openalex.org/W4360584316",
+      "title": "A Survey on Offline Reinforcement Learning: Taxonomy, Review, and Open Problems",
+      "url": "https://doi.org/10.1109/tnnls.2023.3250269",
+      "source": "openalex-classics",
+      "published_year": 2023,
+      "citation_count": 270,
+      "recommended_at": "2026-04-24T02:15:44.906252+00:00"
+    },
+    {
+      "id": "https://openalex.org/W4385430674",
+      "title": "Learning Fine-Grained Bimanual Manipulation with Low-Cost Hardware",
+      "url": "https://doi.org/10.15607/rss.2023.xix.016",
+      "source": "openalex-classics",
+      "published_year": 2023,
+      "citation_count": 422,
+      "recommended_at": "2026-04-24T02:15:44.906252+00:00"
+    },
+    {
+      "id": "https://openalex.org/W4403337227",
+      "title": "Diffusion policy: Visuomotor policy learning via action diffusion",
+      "url": "https://doi.org/10.1177/02783649241273668",
+      "source": "openalex-classics",
+      "published_year": 2024,
+      "citation_count": 295,
+      "recommended_at": "2026-04-24T02:15:44.906252+00:00"
+    }
+  ]
 }
